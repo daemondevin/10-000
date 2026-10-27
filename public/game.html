@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>10,000 with Friends!</title>
+    <meta name="description" content="An online game of 10,000 (Farkle). Join with a name and play with your friends.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,400&amp;display=swap">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/styles/app.css">
+</head>
+<body>
+    <main class="app-shell">
+        <section class="app-card" aria-label="Game table">
+            <div data-plugin-particles data-plugin-options='{"density": 160, "color": "#0088cc", "opacity": 1, "hover": {"mode": "bubble", "distance": 250}, "click": {"mode": "repulse", "distance": 400}}'></div>
+
+            <div class="app-toolbar">
+                <button type="button" id="copyInvite" class="btn btn-primary btn-sm" data-plugin-tooltip="Copy the link to this game and send it to a friend.">
+                    <i class="bi bi-person-plus-fill me-1" aria-hidden="true"></i> Invite
+                </button>
+                <button type="button" class="btn btn-dark btn-sm" data-drawer-open="rules-drawer" data-plugin-tooltip="Learn to play or review the scoring chart.">
+                    <i class="bi bi-list-check me-1" aria-hidden="true"></i> Rules
+                </button>
+                <button type="button" id="toggleChat" class="btn btn-primary btn-sm" data-drawer-open="chat-drawer" disabled data-plugin-tooltip="Talk with the other players.">
+                    <i class="bi bi-chat-dots-fill me-1" aria-hidden="true"></i> Chat <span id="chatUnread" class="badge text-bg-danger ms-1" hidden>0</span>
+                </button>
+                <a class="btn btn-outline-secondary btn-sm ms-auto" href="/" data-plugin-tooltip="Back to the lobby.">
+                    <i class="bi bi-house-door" aria-hidden="true"></i><span class="visually-hidden">Lobby</span>
+                </a>
+            </div>
+
+            <div class="app-logo mt-2"><svg role="img" aria-label="10,000, the dice-rolling, risk-taking game" viewBox="127.578 100.8379 493.052 163.5485" xmlns="http://www.w3.org/2000/svg" xmlns:bx="https://boxy-svg.com">
+<defs>
+<style bx:fonts="Bruno Ace SC">@import url(https://fonts.googleapis.com/css2?family=Bruno+Ace+SC%3Aital%2Cwght%400%2C400&amp;display=swap);</style>
+<style bx:fonts="Montserrat">@import url(https://fonts.googleapis.com/css2?family=Montserrat%3Aital%2Cwght%400%2C100%3B0%2C200%3B0%2C300%3B0%2C400%3B0%2C500%3B0%2C600%3B0%2C700%3B0%2C800%3B0%2C900%3B1%2C100%3B1%2C200%3B1%2C300%3B1%2C400%3B1%2C500%3B1%2C600%3B1%2C700%3B1%2C800%3B1%2C900&amp;display=swap);</style>
+</defs>
+<g id="#1c1d1eff" transform="matrix(1, 0, 0, 1, 0, -0.20208701491355185)">
+<path fill="#1c1d1e" opacity="1.00" d="M 439.21 141.13 C 457.87 127.84 476.32 114.24 495.04 101.04 C 477.69 114.05 460.2 126.88 442.78 139.8 C 440.54 141.6 437.51 143.01 436.63 145.96 C 436.03 150.39 440.15 154.38 444.48 154.41 C 467.19 157.98 489.81 162.14 512.43 166.25 C 519.18 166.92 525.89 164.2 531.15 160.11 C 548.05 147.95 564.97 135.82 582.01 123.86 C 584.47 122.08 587.42 120.65 588.96 117.9 C 590.36 114.74 589.2 111.28 588.09 108.23 C 593.41 112 598.91 115.85 602.62 121.34 C 605.06 124.52 605.61 128.57 606.59 132.34 C 609.75 145.91 612.95 159.48 616.24 173.01 C 617.09 179.39 619.92 185.33 620.63 191.72 C 615.1 170.8 610 149.69 604.6 128.7 C 603.74 122.22 594.7 122.58 590.52 125.57 C 571.45 139.14 552.43 152.77 533.4 166.39 C 528.7 169.51 529.09 175.98 530.2 180.82 C 534.3 198.16 538.27 215.59 542.26 232.91 C 542.825 236.26 544.52 242.44 544.52 242.44 C 545.91 250.63 556.68 255.66 563.63 250.59 C 579.87 238.99 596.05 227.29 612.26 215.65 C 613.1 215.13 613.99 214.65 614.86 214.14 C 597.62 226.42 580.78 239.26 563.7 251.76 C 557.6 256.03 551.96 261.28 544.91 263.93 C 537.01 265.52 528.93 263.74 520.97 263.67 C 520.66 261.21 523.3 260.78 524.88 259.88 C 529.22 258.25 533.21 254.89 534.24 250.19 C 535.153 245.83 533.552 242.304 532.69 238.18 C 528.66 221.55 524.92 204.83 521 188.17 C 519.69 181.45 517.49 171.89 509.11 171.37 C 488.52 167.99 467.94 164.54 447.36 161.13 C 443.13 160.34 438.44 159.27 434.4 161.35 C 431.61 162.6 429.91 165.28 428.63 167.93 C 428.46 158.26 430.34 146.71 439.21 141.13 Z"/>
+<path d="M 462.846 144.074 C 460.145 146.515 455.214 147.932 451.829 147.238 C 448.438 146.546 447.883 144.008 450.58 141.57 C 453.274 139.127 458.207 137.712 461.594 138.403 C 464.984 139.096 465.54 141.635 462.846 144.074 Z" style="fill: rgb(28, 29, 30); transform-origin: 519.238px 127.364px;" transform="matrix(0.999848, -0.017452, 0.017452, 0.999848, 0, 0)"/>
+<path d="M 514.146 107.213 C 511.445 109.655 506.514 111.071 503.129 110.378 C 499.738 109.685 499.183 107.147 501.879 104.708 C 504.574 102.267 509.507 100.851 512.894 101.543 C 516.284 102.235 516.84 104.774 514.146 107.213 Z" style="fill: rgb(28, 29, 30); transform-origin: 570.538px 90.503px;" transform="matrix(0.999848, -0.017452, 0.017452, 0.999848, 0, 0)"/>
+<path d="M 577.291 116.058 C 574.589 118.498 569.658 119.914 566.273 119.221 C 562.884 118.529 562.327 115.99 565.024 113.552 C 567.718 111.11 572.651 109.695 576.039 110.386 C 579.429 111.078 579.984 113.618 577.291 116.058 Z" style="fill: rgb(28, 29, 30); transform-origin: 633.682px 99.347px;" transform="matrix(0.999848, -0.017452, 0.017452, 0.999848, 0, -0.000001)"/>
+<path d="M 522.248 153.533 C 519.547 155.974 514.616 157.391 511.231 156.697 C 507.84 156.005 507.285 153.467 509.982 151.028 C 512.675 148.586 517.609 147.171 520.996 147.862 C 524.386 148.555 524.942 151.094 522.248 153.533 Z" style="fill: rgb(28, 29, 30); transform-origin: 578.64px 136.823px;" transform="matrix(0.999848, -0.017452, 0.017452, 0.999848, 0, 0)"/>
+<path d="M 518.808 130.325 C 516.108 132.766 511.177 134.182 507.79 133.489 C 504.401 132.796 503.845 130.258 506.541 127.82 C 509.235 125.378 514.168 123.963 517.557 124.654 C 520.946 125.346 521.503 127.885 518.808 130.325 Z" style="fill: rgb(28, 29, 30); transform-origin: 575.199px 113.614px;" transform="matrix(0.999848, -0.017452, 0.017452, 0.999848, 0, 0.000001)"/>
+<path fill="#1c1d1e" opacity="1.00" d="M 571.252 188.05 C 571.245 183.648 573.784 179.088 577.42 178.95 C 580.076 178.901 583.544 182.413 581.782 189.783 C 580.786 193.398 577.49 196.382 574.487 194.747 C 572.341 193.733 571.407 190.758 571.252 188.05 Z" />
+<text style="fill: rgb(28, 29, 30); font-family: 'Bruno Ace SC'; font-size: 94px; white-space: pre;" x="123.741" y="141.54" transform="matrix(0.980376, 0, 0, 0.61017, 6.265308, 138.727142)">10,000</text>
+<text style="fill: rgb(51, 51, 51); font-family: Montserrat; font-size: 14.8px; font-weight: 600; letter-spacing: 0.2px; white-space: pre;" x="184.428" y="246.679">THE DICE-ROLLING, RISK-TAKING GAME</text>
+</g>
+</svg></div>
+            <hr>
+
+            <div class="app-panel">
+                <div class="card">
+                    <div class="card-header py-2 small fw-bold"><i class="bi bi-dice-5 me-1" aria-hidden="true"></i> Dice Board <span class="text-body-secondary fw-normal ms-1" id="roomCode"></span></div>
+                    <div class="card-body">
+                        <div id="start" class="text-center pb-3">
+                            <button type="button" class="btn btn-primary join-btn">
+                                <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i><span class="label-text">Join</span>
+                            </button>
+                        </div>
+
+                        <div id="play">
+                            <div id="turnStatus" role="status" aria-live="polite"></div>
+                            <div class="dice-board">
+                                <div id="dice" class="manual" data-plugin-dice></div>
+                                <div class="board-buttons">
+                                    <button type="button" id="GameStart" class="btn btn-success" hidden>
+                                        <i class="bi bi-play-fill" aria-hidden="true"></i><span class="label-text">Start</span>
+                                    </button>
+                                    <button type="button" id="rollBtn" class="btn btn-primary" hidden disabled>
+                                        <i class="bi bi-dice-6" aria-hidden="true"></i><span class="label-text">Roll</span>
+                                    </button>
+                                    <button type="button" id="Bank" class="btn btn-light border" hidden disabled>
+                                        <i class="bi bi-bank" aria-hidden="true"></i><span class="label-text">Bank</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="playersPanel" data-plugin-collapsible data-plugin-options='{"defaultOpen": true}'>
+                    <button type="button" class="players-toggle" data-collapsible-trigger>
+                        <span class="label-text">Players</span>
+                        <i class="bi bi-chevron-down" data-collapsible-chevron aria-hidden="true"></i>
+                    </button>
+                    <div data-collapsible-content>
+                        <div id="PlayerList" class="list-group"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="join-dialog" data-plugin-dialog data-plugin-options='{"animationIn": "zoomIn", "animationOut": "zoomOut"}'>
+        <div data-dialog-backdrop></div>
+        <div data-dialog-panel class="dialog-sm">
+            <form id="join-form" novalidate>
+                <h2 class="h5 mb-1" data-dialog-title>Join this game</h2>
+                <p class="small text-body-secondary" data-dialog-description>Pick the name the other players will see.</p>
+                <label for="join-name" class="form-label">Your name</label>
+                <input type="text" id="join-name" class="form-control" maxlength="20" autocomplete="nickname" required data-dialog-autofocus>
+                <div class="invalid-feedback">Please enter a name.</div>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button type="button" class="btn btn-light" data-dialog-close>Cancel</button>
+                    <button type="submit" class="btn btn-primary">Join</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="chat-drawer" class="app-drawer manual" data-plugin-drawer data-plugin-options='{"direction": "right"}'>
+        <div data-drawer-panel>
+            <div class="drawer-head">
+                <h2 class="h5" data-drawer-title><i class="bi bi-chat-dots me-1" aria-hidden="true"></i> Chat</h2>
+                <button type="button" class="btn-close" data-drawer-close aria-label="Close the chat"></button>
+            </div>
+            <div id="chatlog" class="chat-log" data-plugin-scroll-shadow aria-live="polite"></div>
+            <form id="chat-form" class="input-group mt-2" autocomplete="off">
+                <input type="text" id="chatmessage" class="form-control" placeholder="Write a message…" maxlength="500" aria-label="Message">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill me-1" aria-hidden="true"></i> Send</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="rules-drawer" class="app-drawer manual" data-plugin-drawer data-plugin-options='{"direction": "right"}'>
+        <div data-drawer-panel>
+            <div class="drawer-head">
+                <h2 class="h5" data-drawer-title><i class="bi bi-list-check me-1"></i> Rules and Scoring</h2>
+                <button type="button" class="btn-close" data-drawer-close aria-label="Close the rules"></button>
+            </div>
+            <div class="flex-grow-1 overflow-auto pe-2" data-plugin-scroll-shadow data-plugin-scrollbar
+               data-plugin-options='{"axis":"y","theme":"inset-3-dark","autoHideScrollbar":true,"scrollInertia":650}'>
+                <div class="rules-md" data-plugin-markdown data-plugin-markdown-src="/rules.md">Loading the rules…</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/vendor/themestrap/js/themestrap.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.loadingoverlay.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.alert.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.toast.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.tooltip.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.drawer.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.dialog.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.markdown.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.scrollshadow.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.scrollbar.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.collapsible.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.dice.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.progressbar.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.counter.js"></script>
+    <script src="/vendor/themestrap/js/components/themestrap.plugin.particles.js"></script>
+    <script src="/vendor/themestrap/js/themestrap.init.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/scripts/scoring.js"></script>
+    <script src="/scripts/app.js"></script>
+    <script src="/scripts/main.js"></script>
+</body>
+</html>
