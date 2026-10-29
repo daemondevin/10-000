@@ -1,6 +1,8 @@
 # 10,000 with Friends
 
-The dice game 10,000 (also known as Farkle), playable online with friends or alone in 3D.
+The dice game 10,000 (also known as Farkle), playable online with friends or alone.
+
+[Live Demo](https://farkle-eqec.onrender.com)
 
 ## Running it
 
