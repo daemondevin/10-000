@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const Game = require("./gameclass");
+const Game = require("./game");
 
 const port = process.env.PORT || 3030;
 const PUBLIC_DIR = path.join(__dirname, "public");
