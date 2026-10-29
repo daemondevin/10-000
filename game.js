@@ -34,13 +34,15 @@ function cleanName(raw) {
 // Ending: banking to WINNING_SCORE starts the final round, where every other player gets one
 // more turn to top the leader. Throwing six of a kind wins on the spot, with no final round.
 class Game {
-  constructor(name) {
+  constructor (name) {
     this.name = name;
     this.players = [];
     this.phase = "lobby";
     this.turnIndex = 0;
     this.turnScore = 0;
     this.dice = this.freshDice();
+    // Dice the current player has picked but not yet kept, shown to everyone at the table
+    this.selection = [];
     this.winner = null;
     // { leaderId, target, remaining: [player ids still to play] } once someone reaches WINNING_SCORE
     this.finalRound = null;
@@ -188,6 +190,7 @@ class Game {
     this.phase = "start";
     this.turnScore = 0;
     this.dice = this.freshDice();
+    this.selection = [];
   }
 
   nextTurn() {
@@ -239,6 +242,20 @@ class Game {
     return { ok: true, points, keep: unique };
   }
 
+  // Records which dice the current player has picked so the others can see them. Picks are only
+  // for show, a throw or bank still sends the dice it keeps. Returns the cleaned list, or null
+  // when the pick is ignored (not this player's turn, nothing on the table, bad indexes).
+  select(socketId, indexes) {
+    if (!this.isTurn(socketId) || this.phase !== "rolled" || !Array.isArray(indexes)) return null;
+    if (indexes.length > DICE_COUNT) return null;
+    const clean = [...new Set(indexes)].filter(
+      (i) => Number.isInteger(i) && i >= 0 && i < DICE_COUNT && !this.dice[i].held && this.dice[i].value != null,
+    );
+    if (clean.length !== indexes.length) return null;
+    this.selection = clean.sort((a, b) => a - b);
+    return this.selection.slice();
+  }
+
   // Throws the dice that are not set aside. After the first throw of a turn the
   // player must keep at least one scoring die from the previous throw.
   roll(socketId, keep = []) {
@@ -247,6 +264,7 @@ class Game {
 
     let gained = 0;
     let hotDice = false;
+    this.selection = [];
 
     if (this.phase === "rolled") {
       const kept = this.scoreKeep(keep);
@@ -301,6 +319,7 @@ class Game {
 
     const kept = this.scoreKeep(keep);
     if (!kept.ok) return kept;
+    this.selection = [];
 
     const player = this.currentPlayer();
     const total = this.turnScore + kept.points;
@@ -362,8 +381,10 @@ class Game {
       phase: this.phase,
       started: this.started,
       turnPlayerId: this.started && current ? current.id : null,
+      turnId: this.turnId || 0,
       turnScore: this.turnScore,
       dice: this.dice.map((d) => ({ value: d.value, held: d.held })),
+      selection: this.selection.slice(),
       players: this.players.map((p) => ({
         id: p.id,
         name: p.name,

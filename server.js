@@ -188,6 +188,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  // The current player picking or dropping a die. Everyone else is told straight away, without
+  // a full state broadcast, so the picks show up as the player makes them. Bad or out of turn
+  // picks are dropped quietly, they can arrive just after a turn ends.
+  on("select", (data) => {
+    if (!game) return;
+    const indexes = game.select(socket.id, data && data.keep);
+    if (!indexes) return;
+    socket.to(game.name).emit("selection", { turnId: game.turnId, indexes });
+  });
+
   on("bank", (data) => {
     if (!game) return;
     const keep = (data && data.keep) || [];

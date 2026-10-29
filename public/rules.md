@@ -53,8 +53,8 @@ The following are the melds that the game recognizes.
 | Four of a kind | Three of a kind × 2 | <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> = 400 |
 | Five of a kind | Three of a kind × 4 | <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> = 800 |
 | Six of a kind | Wins the game | <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> |
-| Run (1 to 6) | 750 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-4"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-6"></i> |
-| Three pairs | 1,500 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-1"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-3"></i> |
+| Run (1 to 6) | 1,500 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-4"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-6"></i> |
+| Three pairs | 750 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-1"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-3"></i> |
 
 Every die beyond three of a kind doubles the meld: three 1s are 1,000, four 1s are 2,000 and five 1s are 4,000. Three 3s are 300, four are 600 and five are 1,200.
 

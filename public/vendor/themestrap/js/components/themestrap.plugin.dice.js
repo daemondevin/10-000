@@ -24,6 +24,7 @@
  *   dice.setState([{ value: 5, held: true }, ...]);
  *   dice.hold([0, 1]); dice.release([0]);
  *   dice.select(2, true); dice.toggle(2); dice.clearSelection();
+ *   dice.setSelected([0, 4]);          // show exactly these as picked, no events, works when not selectable
  *   dice.getSelected();                // [2, 4] indexes
  *   dice.getSelectedValues();          // [1, 5]
  *   dice.setSelectable(true); dice.enable(); dice.disable();
@@ -52,13 +53,13 @@
 // Dice
 (((themestrap = {}, $) => {
     const instanceName = '__pluginDice';
-    const STYLE_ID     = 'ts-dice-styles';
-    const EVT_SELECT   = 'ts.dice.select';
-    const EVT_ROLL     = 'ts.dice.roll';
-    const EVT_ROLLED   = 'ts.dice.rolled';
+    const STYLE_ID = 'ts-dice-styles';
+    const EVT_SELECT = 'ts.dice.select';
+    const EVT_ROLL = 'ts.dice.roll';
+    const EVT_ROLLED = 'ts.dice.rolled';
 
     let instanceCount = 0;
-    let seq           = 0;
+    let seq = 0;
 
     // Which of the nine pip cells (row by row, 1 to 9) are shown for each face
     const FACES = {
@@ -209,7 +210,7 @@
     const toIndexes = (v) => (Array.isArray(v) ? v : [v]).map(Number).filter(Number.isInteger);
 
     class PluginDice {
-        constructor($el, opts) {
+        constructor ($el, opts) {
             return this.initialize($el, opts);
         }
 
@@ -218,10 +219,10 @@
                 return this;
             }
 
-            this.$el      = $el;
-            this._uid     = ++seq;
-            this._ns      = `.tsdice${this._uid}`;
-            this._dice    = [];
+            this.$el = $el;
+            this._uid = ++seq;
+            this._ns = `.tsdice${this._uid}`;
+            this._dice = [];
             this._rolling = null;
 
             this
@@ -249,12 +250,12 @@
 
         build() {
             const self = this;
-            const o    = self.options;
+            const o = self.options;
 
             instanceCount++;
             if (!document.getElementById(STYLE_ID)) {
-                const style       = document.createElement('style');
-                style.id          = STYLE_ID;
+                const style = document.createElement('style');
+                style.id = STYLE_ID;
                 style.textContent = CSS_TEXT;
                 document.head.appendChild(style);
             }
@@ -266,7 +267,7 @@
             if (!o.redOne) self.$el.addClass('ts-dice--plain');
 
             const values = Array.isArray(o.values) ? o.values : [];
-            const held   = Array.isArray(o.held) ? o.held : [];
+            const held = Array.isArray(o.held) ? o.held : [];
 
             for (let i = 0; i < o.count; i++) {
                 const $die = $('<button type="button" class="ts-die"></button>').attr('data-index', i);
@@ -299,17 +300,17 @@
 
             self.$el.on(`keydown${self._ns}`, '.ts-die', function (e) {
                 if (!self.options.selectable) return;
-                const i    = Number(this.getAttribute('data-index'));
+                const i = Number(this.getAttribute('data-index'));
                 const last = self._dice.length - 1;
-                let next   = null;
+                let next = null;
 
                 switch (e.key) {
                     case 'ArrowRight':
-                    case 'ArrowDown':  next = i >= last ? 0 : i + 1; break;
+                    case 'ArrowDown': next = i >= last ? 0 : i + 1; break;
                     case 'ArrowLeft':
-                    case 'ArrowUp':    next = i <= 0 ? last : i - 1; break;
-                    case 'Home':       next = 0; break;
-                    case 'End':        next = last; break;
+                    case 'ArrowUp': next = i <= 0 ? last : i - 1; break;
+                    case 'Home': next = 0; break;
+                    case 'End': next = last; break;
                     default: return;
                 }
                 e.preventDefault();
@@ -350,10 +351,10 @@
                 const s = list[i];
                 if (!s) return;
                 const value = validFace(s.value) ? s.value : null;
-                const held  = Boolean(s.held);
+                const held = Boolean(s.held);
                 if (value !== d.value || held !== d.held) d.selected = false;
                 d.value = value;
-                d.held  = held;
+                d.held = held;
                 this._paint(i);
             });
             this._syncFocus();
@@ -418,6 +419,21 @@
             return this;
         }
 
+        // Shows exactly these dice as picked. Unlike select() it fires no ts.dice.select event
+        // and works while the tray is not selectable, so a game can mirror a choice made
+        // elsewhere, such as another player's picks. Held dice and empty faces are skipped.
+        setSelected(indexes) {
+            const wanted = new Set(toIndexes(indexes));
+            this._dice.forEach((d, i) => {
+                const on = wanted.has(i) && !d.held && d.value !== null;
+                if (d.selected !== on) {
+                    d.selected = on;
+                    this._paint(i);
+                }
+            });
+            return this;
+        }
+
         setSelectable(on) {
             this.options.selectable = Boolean(on);
             if (!this.options.selectable) this.clearSelection();
@@ -450,7 +466,7 @@
         // values when given, otherwise they are random. Resolves with all values once landed.
         roll(indexes, values) {
             const self = this;
-            const o    = self.options;
+            const o = self.options;
 
             let list = indexes == null
                 ? self._dice.reduce((acc, d, i) => (d.held ? acc : acc.concat(i)), [])
@@ -520,8 +536,8 @@
         // Rendering
 
         _paint(i) {
-            const d   = this._dice[i];
-            const o   = this.options;
+            const d = this._dice[i];
+            const o = this.options;
             const $el = d.$el;
             const selectable = this._canSelect(i);
 
@@ -529,9 +545,9 @@
             if (d.value === null && o.emptyFace === 'index') $el.attr('data-value', (i % 6) + 1);
 
             $el.toggleClass('is-empty', d.value === null)
-               .toggleClass('is-held', d.held)
-               .toggleClass('is-selected', d.selected)
-               .toggleClass('is-selectable', selectable);
+                .toggleClass('is-held', d.held)
+                .toggleClass('is-selected', d.selected)
+                .toggleClass('is-selectable', selectable);
 
             if (o.selectable) {
                 $el.attr('aria-pressed', d.selected ? 'true' : 'false');
@@ -592,27 +608,27 @@
     }
 
     PluginDice.defaults = {
-        count:        6,          // number of dice in the tray
-        values:       [],         // starting faces, null or missing for an empty face
-        held:         [],         // starting held flags
-        selectable:   false,      // dice can be picked by click or keyboard
-        size:         'md',       // 'sm' | 'md' | 'lg', or set --ts-dice-size
-        center:       false,      // center the dice in the tray
-        redOne:       true,       // draw the single pip of a one larger and in red
-        emptyFace:    'blank',    // 'blank' draws no pips, 'index' shows faces 1 to 6 in order
+        count: 6,          // number of dice in the tray
+        values: [],         // starting faces, null or missing for an empty face
+        held: [],         // starting held flags
+        selectable: false,      // dice can be picked by click or keyboard
+        size: 'md',       // 'sm' | 'md' | 'lg', or set --ts-dice-size
+        center: false,      // center the dice in the tray
+        redOne: true,       // draw the single pip of a one larger and in red
+        emptyFace: 'blank',    // 'blank' draws no pips, 'index' shows faces 1 to 6 in order
         rollDuration: 900,        // ms a throw tumbles before landing (0 lands at once)
         rollInterval: 80,         // ms between face changes while tumbling
         labels: {
-            group:    'Dice',
-            die:      'Die {n}',
-            empty:    'not thrown',
-            held:     'set aside',
+            group: 'Dice',
+            die: 'Die {n}',
+            empty: 'not thrown',
+            held: 'set aside',
             selected: 'selected',
-            rolled:   'Rolled'
+            rolled: 'Rolled'
         },
-        onSelect:     null,       // function (index, selected, selection) {}
-        onRoll:       null,       // function (indexes) {}
-        onRolled:     null        // function (values, indexes) {}
+        onSelect: null,       // function (index, selected, selection) {}
+        onRoll: null,       // function (indexes) {}
+        onRolled: null        // function (values, indexes) {}
     };
 
     $.extend(themestrap, { PluginDice });
@@ -623,7 +639,7 @@
         const args = Array.prototype.slice.call(arguments, 1);
         return this.map(function () {
             const $this = $(this);
-            const inst  = $this.data(instanceName);
+            const inst = $this.data(instanceName);
             if (inst) {
                 if (typeof opts === 'string' && typeof inst[opts] === 'function') {
                     return inst[opts].apply(inst, args);

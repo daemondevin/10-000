@@ -1,7 +1,7 @@
 // Farkle scoring shared by the server (require) and the browser (window.FarkleScoring).
 // Melds follow the rules page: 1 = 100, 5 = 50, three of a kind = face x 100 (three 1s = 1000),
-// and every extra die of that face doubles it (four 2s = 400, five 2s = 800). Three pairs = 1500,
-// run 1 to 6 = 750. Throwing six of a kind wins the game outright, see isSixOfAKind.
+// and every extra die of that face doubles it (four 2s = 400, five 2s = 800). Three pairs = 750,
+// run 1 to 6 = 1500. Throwing six of a kind wins the game outright, see isSixOfAKind.
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
     module.exports = factory();
@@ -11,8 +11,8 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const RUN_SCORE = 750;
-  const THREE_PAIRS_SCORE = 1500;
+  const RUN_SCORE = 1500;
+  const THREE_PAIRS_SCORE = 750;
 
   // Three of a kind, doubled for each extra die of the same face
   function kindScore(face, count) {

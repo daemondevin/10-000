@@ -14,7 +14,7 @@ Then open http://localhost:3030.
 | Page | What it is |
 | --- | --- |
 | `/` | Lobby: start a new online game or join an open one |
-| `/<room>` | An online game. Share the link (or use **Invite**) so friends can join |
+| `/<room>` | An online game. Share the link (or use **Invite**) so friends can join. The **3D** button switches your own view between the flat dice and the 3D table |
 | `/farkle.html` | Single player or pass and play in 3D (also linked from the lobby) |
 | `/rules` | Rules and scoring chart |
 
@@ -36,7 +36,7 @@ If a player's connection drops or they reload the page, they keep their seat for
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3030` | Port the server listens on |
-| `WINNING_SCORE` | `10000` | Points needed to win, handy for short test games |
+| `WINNING_SCORE` | `10000` | Score that starts the final round, handy for short test games |
 | `ENTRY_SCORE` | `1000` | Points needed in one turn for a player's first bank |
 | `MIN_BANK` | `400` | Smallest turn total a player can bank once on the board |
 | `LEAVE_GRACE_MS` | `60000` | How long a disconnected player keeps their seat |
@@ -52,6 +52,7 @@ If a player's connection drops or they reload the page, they keep their seat for
 | `public/scripts/main.js` | Online game page client |
 | `public/scripts/Lobby.js` | Lobby page client |
 | `public/scripts/farkle.js` | 3D single player game |
+| `public/scripts/dice3d.js` | The 3D table, dice and physics, shared by the 3D game and the online game's 3D view |
 | `public/rules.md` | The rules and scoring chart, shown on every page that has rules |
 | `public/styles/app.css` | Styles for all pages, on top of Bootstrap 5.3, with light and dark themes |
 | `public/vendor/themestrap/` | The Themestrap core, `themestrap.init.js` and the plugins the game uses |

@@ -208,6 +208,80 @@ body {
     .board-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; min-width: 0; }
 }
 
+/* Current player's points this turn, counted with PluginCounter */
+.turn-score {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .35rem .75rem;
+    margin-bottom: .35rem;
+}
+
+.turn-score-who {
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+}
+
+.turn-score-value {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .35rem;
+    font-size: 2rem;
+    font-weight: 300;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-accent);
+}
+
+.turn-score-value small {
+    font-size: .8rem;
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+}
+
+.turn-score-pick {
+    min-width: 6rem;
+    font-weight: 700;
+    color: var(--bs-success);
+}
+
+.turn-score.is-farkle .turn-score-value { color: var(--bs-danger); }
+
+/* 3D table in the online game, in place of the flat dice */
+.dice-3d {
+    position: relative;
+    height: clamp(15rem, 46vh, 24rem);
+    border-radius: .5rem;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 35%, rgba(33, 133, 208, .08), transparent 70%);
+    touch-action: none;
+}
+
+.dice-3d canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.dice-board.is-3d { grid-template-columns: 1fr; }
+
+.dice-board.is-3d .board-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    min-width: 0;
+}
+
+#toggle3d.active {
+    background: var(--app-accent);
+    border-color: var(--app-accent);
+    color: #fff;
+}
+
 .players-toggle {
     display: flex;
     align-items: center;

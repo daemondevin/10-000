@@ -7,6 +7,8 @@
     const room = window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
     const TOKEN_KEY = `farkle:${room}:token`;
     const NAME_KEY = "farkle:name";
+    // Each player picks the flat dice or the 3D table for themselves, remembered per browser
+    const VIEW_KEY = "farkle:view";
 
     const socket = io();
 
@@ -17,6 +19,10 @@
     let joining = false;
     let unread = 0;
     const playerRows = new Map();
+    // Dice the player whose turn it is has picked, as told by the server
+    let remote = { turnId: 0, indexes: [] };
+    // The turn their own picks were last restored for, after a reload
+    let restoredTurn = 0;
 
     const $start = $("#start");
     const $joinBtn = $(".join-btn");
@@ -27,8 +33,18 @@
     const $playerList = $("#PlayerList");
     const $chatBtn = $("#toggleChat");
     const $unread = $("#chatUnread");
+    const $view3dBtn = $("#toggle3d");
+    const $diceBoard = $(".dice-board");
+    const $turnBox = $("#turnScoreBox");
+    const $turnWho = $("#turnScoreWho");
+    const $turnPick = $("#turnScorePick");
+    const turnCounter = $("#turnScore").themestrapPluginCounter({ from: 0, to: 0, speed: 700, thousandsSeparator: "," })[0];
+    turnCounter.shown = 0;
 
-    const dice = $("#dice").themestrapPluginDice({
+    // Boards. The flat PluginDice tray and the 3D table offer the same methods, so the rest of
+    // this file talks to whichever one is showing through `board`.
+
+    const flatDice = $("#dice").themestrapPluginDice({
         count: 6,
         selectable: false,
         size: "lg",
@@ -36,6 +52,103 @@
         emptyFace: "index",
         rollDuration: 900
     })[0];
+    // Only clicks and key presses fire this, not setSelected()
+    document.getElementById("dice").addEventListener("ts.dice.select", (e) => onPick(e.detail.selection));
+
+    const flatBoard = Object.assign(Object.create(flatDice), {
+        name: "2d",
+        show() {
+            $("#dice").prop("hidden", false);
+        },
+        hide() {
+            $("#dice").prop("hidden", true);
+        }
+    });
+    // Methods borrowed from the plugin instance must run with it as `this`
+    ["setState", "roll", "getValues", "setSelectable", "getSelected", "getSelectedValues", "clearSelection", "setSelected"]
+        .forEach((m) => (flatBoard[m] = flatDice[m].bind(flatDice)));
+
+    let board = flatBoard;
+    let tableBoard = null;
+    let tableLoading = null;
+
+    // Loads the 3D table on first use, three.js and the 2 MB dice model only come down then
+    function loadTable() {
+        if (!tableLoading) {
+            tableLoading = import("/scripts/dice3d.js").then(({ DiceTable3D }) => {
+                const host = document.getElementById("dice3d");
+                const table = new DiceTable3D({
+                    canvas: document.getElementById("dice3d-canvas"),
+                    overlayHost: host,
+                    onSelect: (selection) => onPick(selection)
+                });
+                tableBoard = Object.assign(Object.create(table), {
+                    name: "3d",
+                    show() {
+                        host.hidden = false;
+                        table.resize();
+                        table.resume();
+                    },
+                    hide() {
+                        host.hidden = true;
+                        table.pause();
+                    }
+                });
+                ["setState", "roll", "getValues", "setSelectable", "getSelected", "getSelectedValues", "clearSelection", "setSelected"]
+                    .forEach((m) => (tableBoard[m] = table[m].bind(table)));
+                tableBoard.table = table;
+                return tableBoard;
+            });
+        }
+        return tableLoading;
+    }
+
+    async function setView(view) {
+        if (animating) return;
+        let next = flatBoard;
+        if (view === "3d") {
+            $view3dBtn.prop("disabled", true);
+            try {
+                next = await loadTable();
+            } catch (err) {
+                console.error(err);
+                App.toast("3D table unavailable", "The 3D dice could not be loaded, staying with the flat dice.", "warning");
+                next = flatBoard;
+            } finally {
+                $view3dBtn.prop("disabled", false);
+            }
+            // A throw may have started while the table loaded
+            if (animating) return;
+        }
+        const picked = board.getSelected();
+        board.hide();
+        board = next;
+        board.show();
+        $diceBoard.toggleClass("is-3d", board.name === "3d");
+        if (state) board.setState(state.dice);
+        if (isMyTurn()) board.setSelected(picked);
+        App.storage.local.set(VIEW_KEY, board.name);
+        $view3dBtn.attr("aria-pressed", board.name === "3d" ? "true" : "false").toggleClass("active", board.name === "3d");
+        App.setTooltip($view3dBtn, board.name === "3d" ? "Back to the flat dice." : "Throw the dice on the 3D table.");
+        render();
+    }
+
+    $view3dBtn.on("click", () => setView(board.name === "3d" ? "2d" : "3d"));
+
+    // For tests and the console
+    window.__online = {
+        get board() { return board; },
+        get state() { return state; },
+        get animating() { return animating; }
+    };
+    if (App.storage.local.get(VIEW_KEY) === "3d") setView("3d");
+
+    // The player picked or dropped a die, the others see it straight away
+    function onPick(selection) {
+        if (!canChoose()) return;
+        socket.emit("select", { keep: selection });
+        render();
+    }
 
     const loader = App.loader("Connecting to the table…");
     if (loader) loader.show();
@@ -96,6 +209,8 @@
         const isNewEvent = Boolean(event && event.seq > lastSeq);
         if (isNewEvent) lastSeq = event.seq;
 
+        remote = { turnId: next.turnId, indexes: next.selection || [] };
+
         if (!firstState && isNewEvent && (event.type === "roll" || event.type === "farkle" || event.type === "sixkind")) {
             // The result of a throw is only announced once the dice have landed
             throwDice(prev, next, event.thrown || []).then(() => announce(event));
@@ -103,20 +218,29 @@
             return;
         }
 
-        if (!animating) dice.setState(next.dice);
-        if (prev && prev.turnPlayerId !== next.turnPlayerId) dice.clearSelection();
+        if (!animating) board.setState(next.dice);
+        if (prev && prev.turnId !== next.turnId) board.clearSelection();
         if (!firstState && isNewEvent) announce(event);
+        render();
+    });
+
+    // Another player picked or dropped a die
+    socket.on("selection", (data) => {
+        if (!state || !data || data.turnId !== state.turnId) return;
+        remote = { turnId: data.turnId, indexes: Array.isArray(data.indexes) ? data.indexes : [] };
         render();
     });
 
     // Tumbles the thrown dice from their current faces onto the server's result
     function throwDice(prev, next, thrown) {
         animating = true;
-        const current = dice.getValues();
-        dice.setState(next.dice.map((d, i) => (thrown.includes(i) ? { value: current[i], held: false } : d)));
-        return dice.roll(thrown, thrown.map((i) => next.dice[i].value)).then(() => {
+        const thrower = board;
+        thrower.clearSelection();
+        const current = thrower.getValues();
+        thrower.setState(next.dice.map((d, i) => (thrown.includes(i) ? { value: current[i], held: false } : d)));
+        return thrower.roll(thrown, thrown.map((i) => next.dice[i].value)).then(() => {
             animating = false;
-            dice.setState(state.dice);
+            board.setState(state.dice);
             render();
         });
     }
@@ -228,14 +352,11 @@
 
     $startBtn.on("click", () => socket.emit("GameStart"));
     $rollBtn.on("click", () => {
-        if (!$rollBtn.prop("disabled")) socket.emit("roll", { keep: dice.getSelected() });
+        if (!$rollBtn.prop("disabled")) socket.emit("roll", { keep: board.getSelected() });
     });
     $bankBtn.on("click", () => {
-        if (!$bankBtn.prop("disabled")) socket.emit("bank", { keep: dice.getSelected() });
+        if (!$bankBtn.prop("disabled")) socket.emit("bank", { keep: board.getSelected() });
     });
-
-    // Picking dice changes the score preview and the buttons
-    document.getElementById("dice").addEventListener("ts.dice.select", () => render());
 
     // Rendering
 
@@ -260,8 +381,18 @@
         return free.length > 0 && scoreSelection(free) > 0;
     }
 
+    // Picks made by the player whose turn it is, as shown to everyone else
+    function watchedPicks() {
+        if (!state || !state.started || state.phase !== "rolled" || animating) return [];
+        if (remote.turnId !== state.turnId) return [];
+        return remote.indexes.filter((i) => state.dice[i] && !state.dice[i].held && state.dice[i].value != null);
+    }
+
+    // The current pick and what it is worth: our own on our turn, otherwise the one we watch
     function selectionInfo() {
-        const values = dice.getSelectedValues();
+        const values = isMyTurn()
+            ? board.getSelectedValues()
+            : watchedPicks().map((i) => state.dice[i].value);
         const points = scoreSelection(values);
         return { count: values.length, points, valid: values.length > 0 && points > 0 };
     }
@@ -269,7 +400,17 @@
     function render() {
         if (!state) return;
         const myTurn = isMyTurn();
-        dice.setSelectable(canChoose());
+        board.setSelectable(canChoose());
+        if (myTurn) {
+            // After a reload the server still knows what we had picked
+            if (canChoose() && restoredTurn !== state.turnId) {
+                restoredTurn = state.turnId;
+                if (!board.getSelected().length && state.selection && state.selection.length) board.setSelected(state.selection);
+            }
+        } else {
+            // Turning picking off clears picks, so the watched ones are drawn after
+            board.setSelected(watchedPicks());
+        }
 
         const sel = selectionInfo();
         const turnPlayer = state.players.find((p) => p.id === state.turnPlayerId);
@@ -295,7 +436,7 @@
         $rollBtn.prop("disabled", !canRoll);
         $bankBtn.prop("disabled", !canBank).toggleClass("btn-success", canBank).toggleClass("btn-light border", !canBank);
 
-        const free = state.dice.filter((d, i) => !d.held && !dice.getSelected().includes(i)).length;
+        const free = state.dice.filter((d, i) => !d.held && !board.getSelected().includes(i)).length;
         const willThrow = state.phase === "start" || free === 0 ? 6 : free;
         setLabel($rollBtn, canRoll ? `Roll ${willThrow}` : "Roll");
         setLabel($bankBtn, canBank ? `Bank ${App.number(pending)}` : "Bank");
@@ -312,7 +453,8 @@
             else text += `Waiting for ${host ? host.name : "the host"} to start.`;
         } else {
             const who = myTurn ? "Your" : `${turnPlayer ? turnPlayer.name : "Someone"}'s`;
-            text = `${who} turn · ${App.number(state.turnScore)} this turn`;
+            // The points this turn are on the counter above, the line says what is going on
+            text = `${who} turn`;
             if (animating) text = `${myTurn ? "You are" : (turnPlayer ? turnPlayer.name : "Someone") + " is"} rolling…`;
             else if (state.phase === "farkled") text = `${myTurn ? "You" : turnPlayer.name} farkled!`;
             else if (myTurn && state.phase === "start") {
@@ -321,13 +463,17 @@
                 if (!sel.count && hotDiceReady()) text += " · Hot Dice! Keep every die to throw all six again";
                 else if (!sel.count) text += " · Pick the dice to keep";
                 else if (!sel.valid) text += " · Every kept die must score";
-                else if (hotDiceReady() && dice.getSelected().length === state.dice.filter((d) => !d.held).length) {
+                else if (hotDiceReady() && board.getSelected().length === state.dice.filter((d) => !d.held).length) {
                     text += ` · +${App.number(sel.points)} · Hot Dice! Roll all six again`;
                     if (pending < needed) text += ` · ${App.number(needed - pending)} more to bank`;
                 } else {
                     text += ` · +${App.number(sel.points)} selected`;
                     if (pending < needed) text += ` · ${App.number(needed - pending)} more to bank`;
                 }
+            } else if (!myTurn && state.phase === "rolled") {
+                // Watching: the picks light up on our dice too
+                if (!sel.count) text += " · choosing dice";
+                else text += sel.valid ? ` · picked +${App.number(sel.points)}` : " · picking";
             }
             if (state.finalRound && !animating && state.phase !== "farkled") {
                 const fr = state.finalRound;
@@ -340,7 +486,27 @@
         }
         $status.text(text);
 
+        renderTurnScore(turnPlayer, myTurn, sel);
         renderPlayers();
+    }
+
+    // The current player's points this turn, plus what the dice they have picked are worth,
+    // counted up or down with PluginCounter so everyone sees the turn grow
+    function renderTurnScore(turnPlayer, myTurn, sel) {
+        const show = Boolean(state.started && turnPlayer);
+        $turnBox.prop("hidden", !show);
+        if (!show) return;
+        $turnWho.text(myTurn ? "Your turn" : `${turnPlayer.name}'s turn`);
+        const value = state.turnScore + (sel.valid ? sel.points : 0);
+        if (turnCounter.shown !== value) {
+            turnCounter.shown = value;
+            turnCounter.replay(value);
+        }
+        let note = "";
+        if (state.phase === "farkled") note = "Farkle!";
+        else if (sel.valid) note = `+${App.number(sel.points)} picked`;
+        $turnPick.text(note).toggleClass("text-danger", state.phase === "farkled");
+        $turnBox.toggleClass("is-farkle", state.phase === "farkled");
     }
 
     // One row per player, kept between renders so the score counter and progress bar can animate
@@ -411,9 +577,18 @@
         const $line = $('<div class="chat-line"></div>').toggleClass("is-system", system).toggleClass("is-mine", mine);
         if (sender) $line.append($('<span class="chat-sender"></span>').text(sender + ": "));
         $line.append(document.createTextNode(text));
-        const log = document.getElementById("chatlog");
-        log.appendChild($line[0]);
-        log.scrollTop = log.scrollHeight;
+
+        // PluginScrollbar moves the log's content into its own container, new lines go there
+        // and the scrollbar is asked to scroll to the end
+        const $log = $("#chatlog");
+        const scrollbar = $log.data("__scrollbar");
+        const $content = $log.find(".ts-scrollbox-container").first();
+        ($content.length ? $content : $log).append($line);
+        if (scrollbar) {
+            scrollbar.update().scrollTo("bottom", { scrollInertia: 0 });
+        } else {
+            $log[0].scrollTop = $log[0].scrollHeight;
+        }
 
         const drawer = App.drawer("chat-drawer");
         if (!mine && !system && !(drawer && drawer.isOpen)) {

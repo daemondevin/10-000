@@ -8,7 +8,7 @@ process.env.PORT = "0";
 process.env.LEAVE_GRACE_MS = "400";
 // High enough that the random socket game never reaches it, the final round tests set scores directly
 process.env.WINNING_SCORE = "50000";
-const Game = require("../gamec");
+const Game = require("../game");
 
 // Makes every die the server throws show face until restore() is called
 function loadDice(face) {
@@ -69,9 +69,9 @@ async function engineTests() {
       [[2, 2, 2], 200], [[2, 2, 2, 2], 400], [[2, 2, 2, 2, 2], 800],
       [[3, 3, 3], 300], [[3, 3, 3, 3], 600], [[3, 3, 3, 3, 3], 1200],
       [[5, 5, 5, 5], 1000], [[6, 6, 6, 6, 6], 2400],
-      [[1, 2, 3, 4, 5, 6], 750], [[2, 2, 3, 3, 6, 6], 1500],
+      [[1, 2, 3, 4, 5, 6], 1500], [[2, 2, 3, 3, 6, 6], 750],
       // Four of a kind plus a pair: three pairs when that is worth more
-      [[2, 2, 2, 2, 6, 6], 1500], [[1, 1, 1, 1, 5, 5], 2100],
+      [[2, 2, 2, 2, 6, 6], 750], [[1, 1, 1, 1, 5, 5], 2100],
       [[3, 3, 3, 1, 5], 450], [[1, 2], 0], [[2, 3, 4, 6, 6, 3], 0],
     ];
     for (const [values, expected] of cases) assert.strictEqual(scoreSelection(values), expected, values.join(""));
@@ -383,6 +383,34 @@ async function engineTests() {
     assert.strictEqual(g.phase, "start");
   });
 
+  await test("picks are checked, shared through the state, and cleared by a throw", () => {
+    const g = new Game("abcde");
+    g.addPlayer("s1", "Ann");
+    g.addPlayer("s2", "Bob");
+    g.start("s1");
+    g.turnIndex = 0;
+    g.beginTurn();
+    assert.strictEqual(g.select("s1", [0]), null, "nothing on the table yet");
+    g.phase = "rolled";
+    g.dice.forEach((d, i) => {
+      d.value = [1, 5, 2, 2, 3, 4][i];
+      d.held = i === 5;
+    });
+    assert.strictEqual(g.select("s2", [0]), null, "not Bob's turn");
+    assert.strictEqual(g.select("s1", [5]), null, "a held die");
+    assert.strictEqual(g.select("s1", [0, 9]), null, "out of range");
+    assert.strictEqual(g.select("s1", "0"), null, "not a list");
+    assert.deepStrictEqual(g.select("s1", [1, 0]), [0, 1]);
+    assert.deepStrictEqual(g.select("s1", [2]), [2], "picks need not score yet");
+    assert.deepStrictEqual(g.select("s1", []), [], "dropping every pick");
+    g.select("s1", [0, 1]);
+    const st = g.publicState();
+    assert.deepStrictEqual(st.selection, [0, 1]);
+    assert.strictEqual(st.turnId, g.turnId);
+    g.roll("s1", [0, 1]);
+    assert.deepStrictEqual(g.selection, [], "a throw clears the picks");
+  });
+
   await test("publicState never exposes socket ids or tokens", () => {
     const g = new Game("abcde");
     g.addPlayer("secret-socket", "Ann");
@@ -407,7 +435,7 @@ async function serverTests() {
     socket.on("problem", (p) => c.problems.push(p));
     socket.on("msg", (m) => c.msgs.push(m));
     socket.on("joined", (j) => (c.me = j));
-    ["gamewon", "playerDisconect", "missing"].forEach((e) => socket.on(e, (d) => c.events.push([e, d])));
+    ["gamewon", "playerDisconect", "missing", "selection"].forEach((e) => socket.on(e, (d) => c.events.push([e, d])));
     socket.on("connect", () => socket.emit("watch", { room, token }));
     clients.push(c);
     return c;
@@ -485,7 +513,7 @@ async function serverTests() {
 
       // Keep every scoring die and roll on until the turn total is big enough to bank
       let keep = [];
-      for (;;) {
+      for (; ;) {
         const seq = me.state.lastEvent ? me.state.lastEvent.seq : 0;
         me.socket.emit("roll", { keep });
         await until(() => me.state.lastEvent && me.state.lastEvent.seq > seq);
@@ -570,6 +598,39 @@ async function serverTests() {
 
     a.socket.emit("GameStart");
     await until(() => a.state.started && a.state.finalRound === null);
+  });
+
+  await test("picks reach the other players as they are made, not the picker", async () => {
+    const game = games.get(room);
+    const turn = [a, b, c].find((x) => x.me.id === a.state.turnPlayerId);
+    const others = [a, b, c].filter((x) => x !== turn);
+    // Put dice on the table for the current player
+    let seq = a.state.lastEvent.seq;
+    if (a.state.phase !== "rolled") {
+      turn.socket.emit("roll", { keep: [] });
+      await until(() => a.state.lastEvent.seq > seq);
+      if (a.state.phase !== "rolled") return; // farkled or won, nothing to pick
+    }
+    [a, b, c].forEach((x) => (x.events = x.events.filter(([e]) => e !== "selection")));
+    const free = game.dice.map((d, i) => (d.held ? -1 : i)).filter((i) => i >= 0);
+    turn.socket.emit("select", { keep: [free[0]] });
+    await until(() => others.every((x) => x.events.some(([e, d]) => e === "selection" && d.indexes.join() === String(free[0]))));
+    assert.ok(others.every((x) => x.events.find(([e]) => e === "selection")[1].turnId === a.state.turnId));
+    turn.socket.emit("select", { keep: [] });
+    await until(() => others.every((x) => x.events.some(([e, d]) => e === "selection" && d.indexes.length === 0)));
+    await wait(100);
+    assert.ok(!turn.events.some(([e]) => e === "selection"), "the picker is not echoed");
+
+    // Out of turn and bad picks are dropped without a problem message
+    const problems = others[0].problems.length;
+    others[0].socket.emit("select", { keep: [0] });
+    turn.socket.emit("select", { keep: ["x"] });
+    turn.socket.emit("select", null);
+    await wait(150);
+    assert.strictEqual(others[0].problems.length, problems);
+    assert.deepStrictEqual(game.selection, []);
+    // Hand the next test a turn that has not been thrown yet
+    game.beginTurn();
   });
 
   await test("six of a kind over sockets wins on the spot", async () => {

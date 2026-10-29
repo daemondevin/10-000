@@ -13,6 +13,15 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/styles/app.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+        }
+    }
+    </script>
 </head>
 <body>
     <main class="app-shell">
@@ -29,7 +38,10 @@
                 <button type="button" id="toggleChat" class="btn btn-primary btn-sm" data-drawer-open="chat-drawer" disabled data-plugin-tooltip="Talk with the other players.">
                     <i class="bi bi-chat-dots-fill me-1" aria-hidden="true"></i> Chat <span id="chatUnread" class="badge text-bg-danger ms-1" hidden>0</span>
                 </button>
-                <a class="btn btn-outline-secondary btn-sm ms-auto" href="/" data-plugin-tooltip="Back to the lobby.">
+                <button type="button" id="toggle3d" class="btn btn-outline-secondary btn-sm ms-auto" aria-pressed="false" data-plugin-tooltip="Throw the dice on the 3D table.">
+                    <i class="bi bi-badge-3d" aria-hidden="true"></i><span class="visually-hidden">3D dice</span>
+                </button>
+                <a class="btn btn-outline-secondary btn-sm" href="/" data-plugin-tooltip="Back to the lobby.">
                     <i class="bi bi-house-door" aria-hidden="true"></i><span class="visually-hidden">Lobby</span>
                 </a>
                 <button type="button" class="btn btn-outline-secondary btn-sm app-theme-toggle" data-plugin-darkmode data-plugin-tooltip="Switch to dark mode" style="width:2rem;height:1.938rem;"><span class="visually-hidden">Light or dark theme</span></button>
@@ -65,9 +77,17 @@
                         </div>
 
                         <div id="play">
+                            <div id="turnScoreBox" class="turn-score" hidden>
+                                <span id="turnScoreWho" class="turn-score-who">Your turn</span>
+                                <span class="turn-score-value"><span id="turnScore">0</span><small>this turn</small></span>
+                                <span id="turnScorePick" class="turn-score-pick"></span>
+                            </div>
                             <div id="turnStatus" role="status" aria-live="polite"></div>
                             <div class="dice-board">
                                 <div id="dice" class="manual" data-plugin-dice></div>
+                                <div id="dice3d" class="dice-3d" hidden>
+                                    <canvas id="dice3d-canvas" aria-label="3D dice table. Click dice to keep them, drag to turn the table, scroll to zoom."></canvas>
+                                </div>
                                 <div class="board-buttons">
                                     <button type="button" id="GameStart" class="btn btn-success" hidden>
                                         <i class="bi bi-play-fill" aria-hidden="true"></i><span class="label-text">Start</span>
