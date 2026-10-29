@@ -18,7 +18,7 @@
         },
 
         // Fire and forget notification. Title and body are plain text.
-        toast(title, body, type = "neutral", options = {}) {
+        toast(title, body, type = "info", options = {}) {
             if (!themestrap.PluginAlert) return;
             themestrap.PluginAlert.create(Object.assign({
                 type,
@@ -71,7 +71,6 @@
                 overlay = $body.themestrapPluginLoadingOverlay(Object.assign({
                     type: "dots",
                     color: "#2185d0",
-                    backdrop: "rgba(246, 246, 246, .92)",
                     message: message || ""
                 }, options))[0];
             } else if (message != null) {
@@ -101,6 +100,33 @@
     }
 
     window.App = App;
+
+    // Changes a PluginScrollbar's theme in place
+    function setScrollbarTheme($el, theme) {
+        const sb = $($el).data('__scrollbar');
+        if (!sb || sb.options.theme === theme) return;
+        const oldClass = 'ts-scrollbar-' + sb.options.theme;
+        sb._$box.add(sb._$toolsV || []).add(sb._$toolsH || [])
+            .removeClass(oldClass)
+            .addClass('ts-scrollbar-' + theme);
+        sb.options.theme = theme;
+    }
+
+    // Light and dark theme. Set before the toggles are built so every toggle picks this up.
+    // The game has no server side theming, so the cookie is left off. The plugin also puts a
+    // native title on the toggle, which is swapped for the themed tooltip the other buttons use.
+    if (themestrap.PluginDarkMode) {
+        $.extend(themestrap.PluginDarkMode.defaults, {
+            cookieEnabled: false,
+            onChange(theme) {
+                const label = this.$el.attr("aria-label");
+                this.$el.removeAttr("title");
+                App.setTooltip(this.$el, label);
+                setScrollbarTheme('#rules-content', theme === 'dark' ? 'inset-3' : 'inset-3-dark');
+                setScrollbarTheme('#chatlog', theme === 'dark' ? 'inset-3' : 'inset-3-dark');
+            }
+        });
+    }
 
     // Page loader until everything (fonts, images, scripts) has arrived
     const pageLoader = App.loader("");

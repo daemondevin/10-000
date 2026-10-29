@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { scoreSelection, hasScoringDice } = require("./public/scripts/scoring.js");
+const { scoreSelection, hasScoringDice, isSixOfAKind } = require("./public/scripts/scoring.js");
 
 const DICE_COUNT = 6;
 // Reads a whole number setting from the environment, used for quick test games
@@ -30,6 +30,9 @@ function cleanName(raw) {
 
 // Phases: lobby (waiting for the host), start (turn begins, nothing thrown yet),
 // rolled (dice on the table, player is choosing), farkled (pause before the next turn)
+//
+// Ending: banking to WINNING_SCORE starts the final round, where every other player gets one
+// more turn to top the leader. Throwing six of a kind wins on the spot, with no final round.
 class Game {
   constructor(name) {
     this.name = name;
@@ -39,6 +42,8 @@ class Game {
     this.turnScore = 0;
     this.dice = this.freshDice();
     this.winner = null;
+    // { leaderId, target, remaining: [player ids still to play] } once someone reaches WINNING_SCORE
+    this.finalRound = null;
     this.lastEvent = null;
     this.createdAt = Date.now();
   }
@@ -129,7 +134,24 @@ class Game {
 
     if (!this.players.length) {
       this.phase = "lobby";
+      this.finalRound = null;
       return player;
+    }
+
+    if (this.started && this.finalRound) {
+      const fr = this.finalRound;
+      fr.remaining = fr.remaining.filter((pid) => pid !== player.id);
+      if (fr.leaderId === player.id) {
+        // The leader left, the best score still at the table becomes the one to beat.
+        // That player keeps their last turn if they have not had it yet.
+        const best = this.players.reduce((a, b) => (b.score > a.score ? b : a));
+        fr.leaderId = best.id;
+        fr.target = best.score;
+      }
+      if (!fr.remaining.length) {
+        this.endGame(this.findById(fr.leaderId), "score");
+        return player;
+      }
     }
 
     if (this.started) {
@@ -154,6 +176,7 @@ class Game {
       p.entered = ENTRY_SCORE === 0;
     });
     this.winner = null;
+    this.finalRound = null;
     this.turnIndex = crypto.randomInt(0, this.players.length);
     this.beginTurn();
     return { ok: true };
@@ -171,6 +194,35 @@ class Game {
     if (!this.players.length) return;
     this.turnIndex = (this.turnIndex + 1) % this.players.length;
     this.beginTurn();
+  }
+
+  findById(id) {
+    return this.players.find((p) => p.id === id) || null;
+  }
+
+  // Ends the current turn after a bank or a farkle. In the final round this also crosses the
+  // player off, and the game ends once everyone has had their last turn. Returns true when
+  // the game is over.
+  finishTurn() {
+    const fr = this.finalRound;
+    if (fr) {
+      const player = this.currentPlayer();
+      fr.remaining = fr.remaining.filter((id) => id !== player.id);
+      if (!fr.remaining.length) {
+        this.endGame(this.findById(fr.leaderId), "score");
+        return true;
+      }
+    }
+    this.nextTurn();
+    return false;
+  }
+
+  // reason is "score" (highest total after the final round) or "six" (threw six of a kind)
+  endGame(player, reason, face) {
+    this.winner = { id: player.id, name: player.name, score: player.score, reason };
+    if (face) this.winner.face = face;
+    this.finalRound = null;
+    this.phase = "lobby";
   }
 
   // Checks that keep lists distinct, available dice that all score, and returns their points
@@ -220,6 +272,15 @@ class Game {
     });
 
     const values = thrown.map((i) => this.dice[i].value);
+
+    // Six of a kind in one throw wins outright, the dice stay on the table to show it
+    if (isSixOfAKind(values)) {
+      const player = this.currentPlayer();
+      this.turnScore = 0;
+      this.endGame(player, "six", values[0]);
+      return { ok: true, farkle: false, sixOfAKind: true, face: values[0], thrown, hotDice, gained, player };
+    }
+
     if (!hasScoringDice(values)) {
       const lost = this.turnScore;
       this.turnScore = 0;
@@ -257,15 +318,35 @@ class Game {
     player.score += total;
     this.turnScore = 0;
 
-    if (player.score >= WINNING_SCORE) {
-      this.winner = { id: player.id, name: player.name, score: player.score };
-      this.phase = "lobby";
-      this.dice = this.freshDice();
-      return { ok: true, banked: total, won: true, player };
+    let finalRoundStarted = false;
+    let tookLead = false;
+    if (this.finalRound) {
+      // Everyone else has to top the leader, a tie is not enough
+      if (player.score > this.finalRound.target) {
+        this.finalRound.leaderId = player.id;
+        this.finalRound.target = player.score;
+        tookLead = true;
+      }
+    } else if (player.score >= WINNING_SCORE) {
+      // Every other player, in turn order, gets one more turn to beat this score
+      const others = [];
+      for (let i = 1; i < this.players.length; i++) {
+        others.push(this.players[(this.turnIndex + i) % this.players.length].id);
+      }
+      this.finalRound = { leaderId: player.id, target: player.score, remaining: others };
+      finalRoundStarted = true;
+      if (!others.length) {
+        // Playing alone, there is nobody left to beat
+        this.endGame(player, "score");
+        this.dice = this.freshDice();
+        return { ok: true, banked: total, won: true, player, winner: this.winner };
+      }
     }
 
-    this.nextTurn();
-    return { ok: true, banked: total, won: false, player };
+    // The banking player is already crossed off when they were in the final round
+    const won = this.finishTurn();
+    if (won) this.dice = this.freshDice();
+    return { ok: true, banked: total, won, player, finalRoundStarted, tookLead, winner: this.winner };
   }
 
   // Turn total a player must reach before banking is allowed
@@ -292,6 +373,11 @@ class Game {
         connected: p.connected,
       })),
       winner: this.winner,
+      finalRound: this.finalRound && {
+        leaderId: this.finalRound.leaderId,
+        target: this.finalRound.target,
+        remaining: this.finalRound.remaining.slice(),
+      },
       winningScore: WINNING_SCORE,
       entryScore: ENTRY_SCORE,
       minBank: MIN_BANK,

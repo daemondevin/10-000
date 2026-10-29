@@ -1,6 +1,7 @@
 // Farkle scoring shared by the server (require) and the browser (window.FarkleScoring).
 // Melds follow the rules page: 1 = 100, 5 = 50, three of a kind = face x 100 (three 1s = 1000),
-// four of a kind = 1000, five = 2000, six = 3000, three pairs = 1500, run 1 to 6 = 2500.
+// and every extra die of that face doubles it (four 2s = 400, five 2s = 800). Three pairs = 1500,
+// run 1 to 6 = 750. Throwing six of a kind wins the game outright, see isSixOfAKind.
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
     module.exports = factory();
@@ -10,12 +11,14 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
+  const RUN_SCORE = 750;
+  const THREE_PAIRS_SCORE = 1500;
+
+  // Three of a kind, doubled for each extra die of the same face
   function kindScore(face, count) {
-    if (count === 3) return face === 1 ? 1000 : face * 100;
-    if (count === 4) return 1000;
-    if (count === 5) return 2000;
-    if (count === 6) return 3000;
-    return 0;
+    if (count < 3) return 0;
+    const three = face === 1 ? 1000 : face * 100;
+    return three * Math.pow(2, count - 3);
   }
 
   function countFaces(values) {
@@ -73,8 +76,8 @@
 
     if (values.length === 6) {
       const faces = counts.slice(1);
-      if (faces.every(function (c) { return c === 1; })) best = Math.max(best, 2500);
-      if (faces.every(function (c) { return c === 0 || c === 2 || c === 4; })) best = Math.max(best, 1500);
+      if (faces.every(function (c) { return c === 1; })) best = Math.max(best, RUN_SCORE);
+      if (faces.every(function (c) { return c === 0 || c === 2 || c === 4; })) best = Math.max(best, THREE_PAIRS_SCORE);
     }
     return Math.max(best, 0);
   }
@@ -87,5 +90,11 @@
     return scoreSelection(values) > 0;
   }
 
-  return { scoreSelection: scoreSelection, hasScoringDice: hasScoringDice };
+  // Six dice thrown at once all showing the same face, an automatic win
+  function isSixOfAKind(values) {
+    return Array.isArray(values) && values.length === 6 && values[0] >= 1 && values[0] <= 6 &&
+      values.every(function (v) { return v === values[0]; });
+  }
+
+  return { scoreSelection: scoreSelection, hasScoringDice: hasScoringDice, isSixOfAKind: isSixOfAKind, kindScore: kindScore };
 });

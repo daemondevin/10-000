@@ -60,9 +60,10 @@ let heldCount = 0;
 let rollTime = 0;
 let settleFrames = 0;
 let farkleTimer = null;
+let finalRound = null;
 
 // Scoring is shared with the online game and the server (public/scripts/scoring.js)
-const { scoreSelection, hasScoringDice } = window.FarkleScoring;
+const { scoreSelection, hasScoringDice, isSixOfAKind } = window.FarkleScoring;
 
 // Menu and views
 
@@ -106,6 +107,7 @@ function startGame(numPlayers) {
     players.push({ name: "P" + (i + 1), bank: 0, entered: ENTRY_SCORE === 0 });
   }
   currentPlayer = 0;
+  finalRound = null;
   $welcome.prop("hidden", true);
   if (welcomeParticles()) welcomeParticles().pause();
   $gameView.prop("hidden", false);
@@ -125,6 +127,7 @@ function welcomeParticles() {
 const rows = [];
 
 function buildScoreTable() {
+  $throwBtn.add($scoreBtn).add($bankTip).detach();
   $tbody.empty();
   rows.length = 0;
   players.forEach((p) => {
@@ -151,6 +154,8 @@ function markCurrentRow() {
       document.createTextNode(p.name)
     );
     if (!p.entered) row.$name.append(' <span class="badge rounded-pill text-bg-secondary ms-1" title="Needs ' + App.number(ENTRY_SCORE) + ' in one turn">not on board</span>');
+    if (finalRound && finalRound.leader === i) row.$name.append(' <span class="badge rounded-pill text-bg-warning ms-1" title="Highest score, the one to beat"><i class="bi bi-trophy-fill me-1" aria-hidden="true"></i>to beat</span>');
+    if (finalRound && finalRound.remaining.has(i)) row.$name.append(' <span class="badge rounded-pill text-bg-info ms-1" title="One last turn to beat the leader">last turn</span>');
     row.$current.text(active ? App.number(turnScore) : "0");
     if (row.shown !== p.bank) {
       row.shown = p.bank;
@@ -237,6 +242,24 @@ function startTurn() {
 function nextPlayer() {
   currentPlayer = (currentPlayer + 1) % players.length;
   startTurn();
+  if (finalRound) {
+    const leader = players[finalRound.leader];
+    const toTop = finalRound.target - players[currentPlayer].bank + 1;
+    App.toast(`${players[currentPlayer].name}'s last turn`, `Score ${App.number(toTop)} to beat ${leader.name}.`, "info", { delay: 4500 });
+  }
+}
+
+// Ends the turn after a bank or a farkle. In the final round the player is crossed off,
+// and once everyone has had their last turn the leader wins.
+function endTurn() {
+  if (finalRound) {
+    finalRound.remaining.delete(currentPlayer);
+    if (!finalRound.remaining.size) {
+      gameOver(players[finalRound.leader]);
+      return;
+    }
+  }
+  nextPlayer();
 }
 
 // Locks the selected dice in, sets them aside and adds their points
@@ -290,50 +313,54 @@ function onBank() {
 
   player.entered = true;
   player.bank += turnScore;
-  themestrap.PluginAlert.create({
-    type: 'success',
-    title: `${player.name} banked ${App.number(turnScore)}`,
-    message: `Total is now ${App.number(player.bank)}.`,
-    showIcon: false,
-    dismissible: false,
-    autoDismiss: true,
-    delay: 5000
-  });
-  //App.toast(`${player.name} banked ${App.number(turnScore)}`, `Total is now ${App.number(player.bank)}.`, "success");
+  App.toast(`${player.name} banked ${App.number(turnScore)}`, `Total is now ${App.number(player.bank)}.`, "success");
   turnScore = 0;
-  markCurrentRow();
 
-  if (player.bank >= WINNING_SCORE) {
-    gameOver(player);
-    return;
+  if (finalRound) {
+    // Everyone else has to top the leader, a tie is not enough
+    if (player.bank > finalRound.target) {
+      finalRound.leader = currentPlayer;
+      finalRound.target = player.bank;
+      App.toast(`${player.name} took the lead!`, `${App.number(player.bank)} is now the score to beat.`, "warning", { delay: 4500 });
+    }
+  } else if (player.bank >= WINNING_SCORE) {
+    if (players.length === 1) {
+      markCurrentRow();
+      gameOver(player);
+      return;
+    }
+    // Every other player gets one more turn to beat this score
+    const remaining = new Set();
+    for (let i = 1; i < players.length; i++) remaining.add((currentPlayer + i) % players.length);
+    finalRound = { leader: currentPlayer, target: player.bank, remaining };
+    App.toast("Final round!", `${player.name} reached ${App.number(player.bank)}. Everyone else gets one last turn to beat it.`, "warning", { delay: 6000 });
   }
-  nextPlayer();
+  markCurrentRow();
+  endTurn();
 }
 
 function farkle() {
   phase = "farkled";
   const lost = turnScore;
   turnScore = 0;
-  themestrap.PluginAlert.create({
-    type: 'danger',
-    title: 'Farkle!',
-    message: lost ? `No scoring dice. ${App.number(lost)} points lost.` : "No scoring dice.",
-    showIcon: false,
-    dismissible: false,
-    autoDismiss: true,
-    delay: 5000
-  });
-  //App.toast("Farkle!", lost ? `No scoring dice. ${App.number(lost)} points lost.` : "No scoring dice.", "danger");
+  App.toast("Farkle!", lost ? `No scoring dice. ${App.number(lost)} points lost.` : "No scoring dice.", "danger");
   updateUI();
-  farkleTimer = setTimeout(nextPlayer, FARKLE_PAUSE_MS);
+  farkleTimer = setTimeout(endTurn, FARKLE_PAUSE_MS);
 }
 
-function gameOver(winner) {
+// sixFace is set when the game was won by throwing six of a kind
+function gameOver(winner, sixFace) {
   phase = "over";
+  finalRound = null;
+  markCurrentRow();
   updateUI();
   $("#winner-title").text(`${winner.name} wins!`);
+  $("#winner-dialog [data-dialog-description]").text(sixFace
+    ? `Threw six ${sixFace}s, an automatic win!`
+    : "Final standings");
   const $list = $("#winner-standings").empty();
-  [...players].sort((a, b) => b.bank - a.bank).forEach((p) => {
+  // The winner leads the list even with fewer points, after a six of a kind
+  [...players].sort((a, b) => (b === winner) - (a === winner) || b.bank - a.bank).forEach((p) => {
     $list.append(
       $('<li class="list-group-item d-flex"></li>')
         .append($('<span class="ms-2 me-auto"></span>').text(p.name), $('<span class="fw-bold"></span>').text(App.number(p.bank)))
@@ -517,6 +544,12 @@ function updateRoll(dt) {
 
 function onRollSettled() {
   const values = dice.filter((d) => d.state === "tray").map((d) => d.value);
+  // Six of a kind in one throw wins outright, even in the final round
+  if (isSixOfAKind(values)) {
+    turnScore = 0;
+    gameOver(players[currentPlayer], values[0]);
+    return;
+  }
   if (!hasScoringDice(values)) {
     farkle();
     return;
@@ -524,16 +557,7 @@ function onRollSettled() {
   phase = "choosing";
   // Hot Dice: every die just thrown can be kept in a scoring meld. Say so as soon as they land.
   if (scoreSelection(values) > 0) {
-    themestrap.PluginAlert.create({
-      type: 'warning',
-      title: 'Hot Dice!',
-      message: 'Every die you threw scores. Keep them all to throw all six again, or bank.',
-      showIcon: false,
-      dismissible: false,
-      autoDismiss: true,
-      delay: 5000
-    });
-    //App.toast("Hot Dice!", "Every die you threw scores. Keep them all to throw all six again, or bank.", "warning", { delay: 4500 });
+    App.toast("Hot Dice!", "Every die you threw scores. Keep them all to throw all six again, or bank.", "warning", { delay: 4500 });
   }
   updateUI();
 }
@@ -730,7 +754,6 @@ async function createDice() {
     message: "Loading the dice…",
     progress: true,
     color: "#2185d0",
-    backdrop: "rgba(246, 246, 246, .85)",
     scrollLock: false
   })[0];
   overlay.show();

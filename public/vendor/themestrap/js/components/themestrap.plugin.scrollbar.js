@@ -18,7 +18,25 @@
  *   const sb = $('#sidebar').data('__scrollbar');
  *   sb.scrollTo('bottom');
  *   sb.update();
+ *   sb.setTheme('rounded-dark');
  *   sb.destroy();
+ *
+ * Light and dark pages:
+ *   darkModeTheme names the theme to use while the page is dark. The scrollbar
+ *   then switches between theme and darkModeTheme by itself, following
+ *   PluginDarkMode (html.dark / data-bs-theme) and the system setting.
+ *     <div data-plugin-scrollbar
+ *          data-plugin-options='{"theme": "inset-3", "darkModeTheme": "inset-3-dark"}'>
+ *
+ *   sb.setTheme('minimal')                    — change the theme now
+ *   sb.setTheme('inset-3', 'inset-3-dark')    — change both themes
+ *   sb.setTheme(null, 'minimal-dark')         — change only the dark page theme
+ *   sb.setTheme(null, null)                   — stop following the page theme
+ *   sb.getTheme()                             — theme currently shown
+ *
+ *   Every change fires callbacks.onThemeChange and a bubbling native
+ *   'ts.scrollbar.theme' event (detail: { theme, previous, dark }). Listen with
+ *   addEventListener, jQuery .on() cannot bind dotted event names.
  *
  * scrollTo() target formats:
  *   sb.scrollTo(300)            — pixel offset
@@ -1165,6 +1183,51 @@
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
+    // Page theme
+    // Mirrors the Themestrap dark mode CSS tiers: html.dark or data-bs-theme="dark"
+    // wins, then data-bs-theme="light", then the system setting.
+    function pageIsDark() {
+        const html = document.documentElement;
+        const bsTheme = html.getAttribute('data-bs-theme');
+        if (html.classList.contains('dark') || bsTheme === 'dark') return true;
+        if (bsTheme === 'light') return false;
+        return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+
+    // Instances with a darkModeTheme share one MutationObserver and one media
+    // listener. Both are removed when the last of those instances is destroyed.
+    const themeFollowers = new Set();
+    let themeWatch = null;
+
+    function followPageTheme(inst) {
+        themeFollowers.add(inst);
+        if (themeWatch) return;
+
+        const refresh = () => themeFollowers.forEach((i) => i._applyTheme());
+        const mo = new MutationObserver(refresh);
+        mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-bs-theme'] });
+
+        const mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        if (mql) {
+            if (typeof mql.addEventListener === 'function') mql.addEventListener('change', refresh);
+            else if (typeof mql.addListener === 'function') mql.addListener(refresh);
+        }
+        themeWatch = { mo, mql, refresh };
+    }
+
+    function unfollowPageTheme(inst) {
+        themeFollowers.delete(inst);
+        if (themeFollowers.size || !themeWatch) return;
+
+        const { mo, mql, refresh } = themeWatch;
+        mo.disconnect();
+        if (mql) {
+            if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', refresh);
+            else if (typeof mql.removeListener === 'function') mql.removeListener(refresh);
+        }
+        themeWatch = null;
+    }
+
     class PluginScrollbar {
 
         constructor($el, opts) {
@@ -1235,12 +1298,15 @@
             // 1 Root element gets Scrollbar + optional autoHide class
             self.$el.addClass('tsScrollbar' + (o.autoHideScrollbar ? ' ts-scrollbar--autoHide' : ''));
 
+            // Theme for the current page (theme, or darkModeTheme on a dark page)
+            const theme = self._appliedTheme = self._resolveTheme();
+
             // 2 Scroll box (the clipping viewport)
             const axisClass = o.axis === 'yx' ? 'ts-scrollbox-vertical-horizontal'
                             : o.axis === 'x'  ? 'ts-scrollbox-horizontal'
                             : 'ts-scrollbox-vertical';
 
-            self._$box = $(`<div class="tsScrollBox ts-scrollbar-${o.theme} ${axisClass} ts-scrollbox-inside"></div>`);
+            self._$box = $(`<div class="tsScrollBox ts-scrollbar-${theme} ${axisClass} ts-scrollbox-inside"></div>`);
 
             // 3 Content container (this is what actually moves when scrolling)
             self._$container = $('<div class="ts-scrollbox-container" style="position:relative;top:0;left:0;"></div>')
@@ -1272,7 +1338,7 @@
                 const $draggerCont = $('<div class="ts-scrollbox-draggerContainer"></div>').append($dragger).append($rail);
 
                 // Theme class is placed on the tools element itself
-                const $tools = $(`<div class="ts-scrollbox-scrollTools ts-scrollbar-${o.theme} ${dirClass}"></div>`)
+                const $tools = $(`<div class="ts-scrollbox-scrollTools ts-scrollbar-${theme} ${dirClass}"></div>`)
                     .append($draggerCont);
 
                 let $btnA = null, $btnB = null;
@@ -1333,6 +1399,9 @@
                 self._ro.observe(self._$box[0]);
                 self._ro.observe(self._$container[0]);
             }
+
+            // 9 Follow the page between light and dark
+            if (o.darkModeTheme) followPageTheme(self);
 
             return this;
         }
@@ -1934,17 +2003,40 @@
         }
 
         // Callbacks 
-        _fireCallback(name) {
+        _fireCallback(name, extra) {
             const cb = this.options.callbacks[name];
             if (typeof cb !== 'function') return;
-            cb.call(this.$el[0], {
+            cb.call(this.$el[0], $.extend({
                 scrollY:    this._scrollY,
                 scrollX:    this._scrollX,
                 maxScrollY: this._maxScrollY,
                 maxScrollX: this._maxScrollX,
                 pctY: this._maxScrollY > 0 ? Math.round(100 * this._scrollY / this._maxScrollY) : 0,
                 pctX: this._maxScrollX > 0 ? Math.round(100 * this._scrollX / this._maxScrollX) : 0,
-            });
+            }, extra));
+        }
+
+        // Theme
+        _resolveTheme() {
+            const o = this.options;
+            return (o.darkModeTheme && pageIsDark()) ? o.darkModeTheme : o.theme;
+        }
+
+        // Swaps the ts-scrollbar-{theme} class on the scroll box and its tracks
+        _applyTheme() {
+            const previous = this._appliedTheme;
+            const theme = this._resolveTheme();
+            if (!this._$box || theme === previous) return this;
+
+            this._$box.add(this._$toolsV || []).add(this._$toolsH || [])
+                .removeClass('ts-scrollbar-' + previous)
+                .addClass('ts-scrollbar-' + theme);
+            this._appliedTheme = theme;
+
+            const detail = { theme, previous, dark: pageIsDark() };
+            this._fireCallback('onThemeChange', detail);
+            this.$el[0].dispatchEvent(new CustomEvent('ts.scrollbar.theme', { bubbles: true, detail }));
+            return this;
         }
 
         // scrollTo target resolution 
@@ -2072,6 +2164,36 @@
         }
 
         /**
+         * Change the theme without rebuilding. Content, scroll position and
+         * event handlers are kept.
+         *
+         * @param {string|null}           theme          — theme for light pages (or every page
+         *                                                 when darkModeTheme is not set).
+         *                                                 null or '' leaves it unchanged.
+         * @param {string|null|undefined} [darkModeTheme] — theme for dark pages. Omit to leave
+         *                                                 it unchanged, null to stop following
+         *                                                 the page theme.
+         */
+        setTheme(theme, darkModeTheme) {
+            const o = this.options;
+            if (typeof theme === 'string' && theme) o.theme = theme;
+            if (darkModeTheme !== undefined) o.darkModeTheme = darkModeTheme || null;
+
+            if (o.darkModeTheme) followPageTheme(this);
+            else unfollowPageTheme(this);
+
+            return this._applyTheme();
+        }
+
+        /**
+         * The theme currently shown.
+         * @returns {string}
+         */
+        getTheme() {
+            return this._appliedTheme;
+        }
+
+        /**
          * Destroy the plugin and restore the element to its original HTML.
          */
         destroy() {
@@ -2082,17 +2204,14 @@
             clearTimeout(self._hideTimer);
 
             if (self._ro) self._ro.disconnect();
+            unfollowPageTheme(self);
 
             $(document).off('.scrollbar-drag').off('.scrollbar-btn');
 
             self.$el
                 .off('.scrollbar')
                 .removeAttr('tabindex')
-                .removeClass((i, cls) =>
-                    cls.split(' ')
-                        .filter(c => c.startsWith('mC') || c === 'ts-scrollbar-disabled' || c === 'ts-scrollbar-no-scrollbar')
-                        .join(' ')
-                )
+                .removeClass('tsScrollbar ts-scrollbar--autoHide ts-scrollbar-disabled ts-scrollbar-no-scrollbar')
                 .html(self._initialHTML)
                 .removeData(instanceName);
 
@@ -2115,6 +2234,11 @@
         // 3d, 3d-dark, 3d-thick, 3d-thick-dark, minimal, minimal-dark,
         // inset, inset-dark, inset-2, inset-2-dark, inset-3, inset-3-dark
         theme: 'light',
+
+        // Theme to use while the page is dark (PluginDarkMode's html.dark or
+        // data-bs-theme="dark", or the system setting when neither is set).
+        // null = always use theme.
+        darkModeTheme: null,
 
         // Easing animation duration in ms. 0 = instant jump.
         scrollInertia: 950,
@@ -2187,6 +2311,10 @@
             // Called when the scroll position returns to (or passes) the start.
             onTotalScrollBack: null,
             onTotalScrollBackOffset: 0,
+
+            // Called when the theme shown changes, from setTheme() or a page
+            // theme switch. Data adds theme, previous and dark.
+            onThemeChange: null,
         },
     };
 

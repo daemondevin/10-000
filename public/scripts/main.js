@@ -96,7 +96,7 @@
         const isNewEvent = Boolean(event && event.seq > lastSeq);
         if (isNewEvent) lastSeq = event.seq;
 
-        if (!firstState && isNewEvent && (event.type === "roll" || event.type === "farkle")) {
+        if (!firstState && isNewEvent && (event.type === "roll" || event.type === "farkle" || event.type === "sixkind")) {
             // The result of a throw is only announced once the dice have landed
             throwDice(prev, next, event.thrown || []).then(() => announce(event));
             render();
@@ -125,14 +125,32 @@
         addChat(msg.system ? null : msg.sender, msg.msg, { system: msg.system });
     });
 
-    socket.on("gamewon", (winner) => {
-        const mine = Boolean(me && state && state.players.some((p) => p.id === me.id && p.name === winner.name));
+    // The game over dialog comes from the "won" and "sixkind" events in announce(), so a winning
+    // throw is shown landing before the dialog covers it
+
+    // Six of a kind in words, "six 4s"
+    function sixOf(face) {
+        return `six ${face}s`;
+    }
+
+    function showWinner(winner) {
+        if (!winner) return;
+        const mine = Boolean(me && winner.id === me.id);
+        const who = mine ? "You" : winner.name;
+        const standings = [...state.players]
+            // The winner leads the list even with fewer points, after a six of a kind
+            .sort((a, b) => (b.id === winner.id) - (a.id === winner.id) || b.score - a.score)
+            .map((p, i) => `${i + 1}. ${p.name}  ${App.number(p.score)}`)
+            .join("\n");
+        const how = winner.reason === "six"
+            ? `${who} threw ${sixOf(winner.face)}, an automatic win!`
+            : `${who} finished on top with ${App.number(winner.score)} points.`;
         themestrap.PluginDialog.alert({
             title: mine ? "You win!" : `${winner.name} wins!`,
-            message: `${mine ? "You" : winner.name} banked ${App.number(winner.score)} points.\n\nThe host can start another game with the same players.`,
+            message: `${how}\n\n${standings}\n\nThe host can start another game with the same players.`,
             confirmLabel: "Nice"
         });
-    });
+    }
 
     socket.on("playerDisconect", (player) => {
         App.toast(`${player.name} left`, player.hadTurn ? "The dice pass to the next player." : "The game carries on.", "dark");
@@ -157,7 +175,18 @@
                 }
                 break;
             case "bank":
-                App.toast(`${who} banked ${App.number(event.banked)}`, "", "success");
+                if (event.tookLead) {
+                    App.toast(`${who} took the lead!`, `${App.number(event.score)} is now the score to beat.`, "warning", { delay: 4500 });
+                } else {
+                    App.toast(`${who} banked ${App.number(event.banked)}`, "", "success");
+                }
+                break;
+            case "final":
+                App.toast("Final round!", `${who} reached ${App.number(event.score)}. Everyone else gets one last turn to beat it.`, "warning", { delay: 6000 });
+                break;
+            case "won":
+            case "sixkind":
+                showWinner(event.winner || state.winner);
                 break;
             case "away":
                 App.toast(`${event.player} disconnected`, "Their seat is kept for a minute.", "dark");
@@ -274,7 +303,10 @@
         // Status line
         let text;
         if (!state.started) {
-            text = state.winner ? `${state.winner.name} won with ${App.number(state.winner.score)}. ` : "";
+            const w = state.winner;
+            text = !w ? "" : w.reason === "six"
+                ? `${w.name} won with ${sixOf(w.face)}. `
+                : `${w.name} won with ${App.number(w.score)}. `;
             if (!me) text += state.players.length ? "Join to play." : "Be the first to join.";
             else if (amHost) text += state.players.length > 1 ? "Press Start when everyone is here." : "Invite friends, or press Start to play alone.";
             else text += `Waiting for ${host ? host.name : "the host"} to start.`;
@@ -296,6 +328,13 @@
                     text += ` · +${App.number(sel.points)} selected`;
                     if (pending < needed) text += ` · ${App.number(needed - pending)} more to bank`;
                 }
+            }
+            if (state.finalRound && !animating && state.phase !== "farkled") {
+                const fr = state.finalRound;
+                const leader = state.players.find((p) => p.id === fr.leaderId);
+                const mover = myTurn ? myPlayer : turnPlayer;
+                const toTop = mover ? fr.target - mover.score + 1 : 0;
+                text += ` · Final round: ${App.number(toTop)} to beat ${leader ? leader.name : "the leader"}`;
             }
             if (turnPlayer && !turnPlayer.connected) text += " (disconnected, waiting)";
         }
@@ -325,6 +364,9 @@
             row.$host.prop("hidden", !p.host);
             row.$away.prop("hidden", p.connected);
             row.$board.prop("hidden", !(state.started && !p.entered));
+            const fr = state.started ? state.finalRound : null;
+            row.$lead.prop("hidden", !(fr && fr.leaderId === p.id));
+            row.$last.prop("hidden", !(fr && fr.remaining.includes(p.id)));
 
             if (row.score !== p.score) {
                 row.score = p.score;
@@ -342,10 +384,12 @@
         const $host = $('<i class="bi bi-star-fill text-warning" title="Host" aria-label="Host"></i>');
         const $away = $('<i class="bi bi-wifi-off text-secondary" title="Disconnected" aria-label="Disconnected"></i>');
         const $board = $('<span class="badge rounded-pill text-bg-secondary" title="Needs one turn of ' + App.number(state.entryScore) + ' to get on the board">not on board</span>');
+        const $lead = $('<span class="badge rounded-pill text-bg-warning" title="Highest score, the one to beat"><i class="bi bi-trophy-fill me-1" aria-hidden="true"></i>to beat</span>');
+        const $last = $('<span class="badge rounded-pill text-bg-info" title="One last turn to beat the leader">last turn</span>');
         const $score = $('<span class="player-score"></span>').text(App.number(p.score));
         const $progress = $("<div></div>");
 
-        $line.append('<span class="turn-dot" aria-hidden="true"></span>', $name, $you, $host, $away, $board, $score);
+        $line.append('<span class="turn-dot" aria-hidden="true"></span>', $name, $you, $host, $away, $board, $lead, $last, $score);
         $el.append($line, $progress);
         $playerList.append($el);
 
@@ -358,7 +402,7 @@
         })[0];
         $progress.attr("aria-label", `${p.name}'s progress to ${App.number(state.winningScore)}`);
 
-        return { $el, $name, $you, $host, $away, $board, counter, progress, score: p.score };
+        return { $el, $name, $you, $host, $away, $board, $lead, $last, counter, progress, score: p.score };
     }
 
     // Chat

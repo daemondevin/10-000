@@ -1,53 +1,90 @@
-## A Brief Rundown
+# 10,000 with Friends
 
-10,000 is a push-your-luck game in which the objective is to be the first player to accumulate 10,000 points. The play is passed back and forth as players attempt to gather point-scoring melds while evaluating if the risk of rolling a farkle and losing all unbanked points is worth the lure of getting just a few more points. As with many games, Farkle is played in numerous regions with dozens of variations. The version we have here is among the simpler ones, and only includes the standard melds common to most variations we could find.
+The dice game 10,000 (also known as Farkle), playable online with friends or alone in 3D.
 
-## Gameplay
+## Running it
 
-### Rolling, scoring, banking
+```bash
+npm install
+npm start
+```
 
-The game is played with six dice. A player starts their turn by throwing all six dice. Once the dice have been rolled the player may put aside any dice that form scoring melds (see melds below). A player must put aside at least one scoring die each throw, but beyond that is free in what dice they put aside or throw again.
+Then open http://localhost:3030.
 
-Players may now roll any remaining dice not already put aside in hopes of being able to make more melds, risking the chance of farkling (see below) and scoring nothing. Players who decide not to take that risk can instead bank. When a player banks, any points earned during the round are added to the grand total and are safe for the rest of the game. The player's turn ends and they pass all dice to their opponent, who takes their turn.
+| Page | What it is |
+| --- | --- |
+| `/` | Lobby: start a new online game or join an open one |
+| `/<room>` | An online game. Share the link (or use **Invite**) so friends can join |
+| `/farkle.html` | Single player or pass and play in 3D (also linked from the lobby) |
+| `/rules` | Rules and scoring chart |
 
-### All dice in a meld must come from one throw
+`npm run dev` restarts the server whenever a file changes.
 
-Melds do not carry over between throws. If you score two ones in one throw and set them aside, throwing a one in the next throw does not mean you have three ones. It means you have a set of two ones worth 200, and a separate set of one worth 100, for a total of 300. Any formed melds must contain dice obtained from a single throw.
+## Playing online
 
-### Getting on the board
+1. Press **New Game** in the lobby and **Join** with a name. The first player to join is the host.
+2. Send the invite link to friends. They join from the link or from the lobby's open games list.
+3. The host presses **Start**. A random player goes first.
+4. On your turn, **Roll**, click the dice you want to keep (they turn green), then **Roll** the rest or **Bank**.
+5. Your first bank needs at least 1,000 points from a single turn. After that every bank needs at least 400.
+6. The first player to bank 10,000 wins. The host can then start another game with the same players.
 
-Your first bank of the game has to be at least **1,000 points** scored in a single turn. Until you manage that you can keep rolling, but banking is not allowed. Once you are on the board, every later turn needs at least **400 points** before you can bank it.
+If a player's connection drops or they reload the page, they keep their seat for a minute and are put back automatically.
 
-### Farkling
+## Settings
 
-If there are no melds on the table after a player throws their dice, they have "farkled". When a player farkles their turn is over, play passes to their opponent, and any unbanked points earned during the round are lost. With every throw the odds of farkling grow higher, and the player risks more and more points in the process. The key of the game comes in finding when you should risk the farkle and throw again, and when you should call it quits and bank your points.
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3030` | Port the server listens on |
+| `WINNING_SCORE` | `10000` | Score that starts the final round, handy for short test games |
+| `ENTRY_SCORE` | `1000` | Points needed in one turn for a player's first bank |
+| `MIN_BANK` | `400` | Smallest turn total a player can bank once on the board |
+| `LEAVE_GRACE_MS` | `60000` | How long a disconnected player keeps their seat |
 
-### Hot Dice
+## Project layout
 
-In the case a player can form melds from all the dice they threw, they have thrown "Hot Dice". Such a player can now, if they choose, pick up all six dice and throw them again, effectively restarting their turn. Any points they already earned before throwing the hot dice are kept as part of the accumulating round total and are risked along with any new melds made with the hot dice. A player can thus continue indefinitely as long as they never farkle.
+| File | Role |
+| --- | --- |
+| `server.js` | Express pages and the socket.io game server |
+| `gameclass.js` | Game rules and turn state, the server is the only source of truth |
+| `public/scripts/scoring.js` | Meld scoring, shared by the server, the online game and the 3D game |
+| `public/scripts/app.js` | Shared page setup: drawers, tooltips, page loader, toasts, storage |
+| `public/scripts/main.js` | Online game page client |
+| `public/scripts/Lobby.js` | Lobby page client |
+| `public/scripts/farkle.js` | 3D single player game |
+| `public/rules.md` | The rules and scoring chart, shown on every page that has rules |
+| `public/styles/app.css` | Styles for all pages, on top of Bootstrap 5.3, with light and dark themes |
+| `public/vendor/themestrap/` | The Themestrap core, `themestrap.init.js` and the plugins the game uses |
+| `test/game.test.js` | Rule tests plus a full game played by socket clients |
 
-### Game End
+## Built with Themestrap
 
-The game ends once a player ends their turn with 10,000 or more points banked. The game doesn't automatically end your turn when you hypothetically reach the threshold, because we've found it to be more fun to manually bank for the win, and in the cases where we want to see how far we can push our already sizable lead. However, once you find that banking will lead to you winning we recommend doing so, unless you just want to show off to Bill.
+The interface is Bootstrap 5.3 with [Themestrap](https://github.com/daemondevin/Themestrap) components, loaded as plain script files with no build step.
 
-## Melds
+| Feature | Themestrap piece |
+| --- | --- |
+| Dice board in the online game | PluginDice |
+| Moving dots behind each page | PluginParticles |
+| Rules and chat panels | PluginDrawer |
+| Rules text from `rules.md` | PluginMarkdown |
+| Join form, game over and notices | PluginDialog |
+| Notifications | PluginToast |
+| Button hints | PluginTooltip |
+| Page, connection and dice model loaders | PluginLoadingOverlay |
+| Player count in the 3D game | PluginNumberInput |
+| Progress toward 10,000 | PluginProgressBar |
+| Animated scores | PluginCounter |
+| Show and hide the player list | PluginCollapsible |
+| Fades on the chat, the rules and the score table | PluginScrollShadow |
+| Light and dark theme toggle on every page | PluginDarkMode |
+| Remembering your name and seat | StorageBin (`themestrap.fn.createStorage`) |
 
-The following are the melds that the game recognizes.
+The theme follows the system setting until a player presses the sun or moon button, then that choice is kept in the browser and shared by every tab.
 
-| Roll | Points | Example |
-| --- | ---: | --- |
-| Single 1 | 100 | <i class="bi bi-dice-1"></i> |
-| Single 5 | 50 | <i class="bi bi-dice-5"></i> |
-| Three 1s | 1,000 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-1"> </i><i class="bi bi-dice-1"></i> |
-| Three 2s | 200 | <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> |
-| Three 3s | 300 | <i class="bi bi-dice-3"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-3"></i> |
-| Three 4s | 400 | <i class="bi bi-dice-4"></i> <i class="bi bi-dice-4"></i> <i class="bi bi-dice-4"></i> |
-| Three 5s | 500 | <i class="bi bi-dice-5"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-5"></i> |
-| Three 6s | 600 | <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> |
-| Four of a kind | 1,000 | <i class="bi bi-dice-4"></i> <i class="bi bi-dice-4"></i> <i class="bi bi-dice-4"></i> <i class="bi bi-dice-4"></i> |
-| Five of a kind | 2,000 | <i class="bi bi-dice-5"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-5"></i> |
-| Six of a kind | 3,000 | <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> <i class="bi bi-dice-6"></i> |
-| Run (1 to 6) | 2,500 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-4"></i> <i class="bi bi-dice-5"></i> <i class="bi bi-dice-6"></i> |
-| Three pairs | 1,500 | <i class="bi bi-dice-1"></i> <i class="bi bi-dice-1"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-2"></i> <i class="bi bi-dice-3"></i> <i class="bi bi-dice-3"></i> |
+To update Themestrap, copy the same files from the Themestrap repository into `public/vendor/themestrap/`.
 
-Four of a kind plus a pair also counts as three pairs. When dice can be counted more than one way, the game always gives you the higher score.
+## Tests
+
+```bash
+npm test
+```

@@ -1,6 +1,6 @@
 # 10,000 with Friends
 
-The dice game 10,000 (a.k.a. Farkle or Hot Dice), playable online with friends or alone in 3D.
+The dice game 10,000 (also known as Farkle), playable online with friends or alone in 3D.
 
 ## Running it
 
@@ -46,14 +46,14 @@ If a player's connection drops or they reload the page, they keep their seat for
 | File | Role |
 | --- | --- |
 | `server.js` | Express pages and the socket.io game server |
-| `game.js` | Game rules and turn state, the server is the only source of truth |
+| `gameclass.js` | Game rules and turn state, the server is the only source of truth |
 | `public/scripts/scoring.js` | Meld scoring, shared by the server, the online game and the 3D game |
 | `public/scripts/app.js` | Shared page setup: drawers, tooltips, page loader, toasts, storage |
 | `public/scripts/main.js` | Online game page client |
-| `public/scripts/lobby.js` | Lobby page client |
+| `public/scripts/Lobby.js` | Lobby page client |
 | `public/scripts/farkle.js` | 3D single player game |
 | `public/rules.md` | The rules and scoring chart, shown on every page that has rules |
-| `public/styles/app.css` | Styles for all pages, on top of Bootstrap 5.3 |
+| `public/styles/app.css` | Styles for all pages, on top of Bootstrap 5.3, with light and dark themes |
 | `public/vendor/themestrap/` | The Themestrap core, `themestrap.init.js` and the plugins the game uses |
 | `test/game.test.js` | Rule tests plus a full game played by socket clients |
 
@@ -68,7 +68,7 @@ The interface is Bootstrap 5.3 with [Themestrap](https://github.com/daemondevin/
 | Rules and chat panels | PluginDrawer |
 | Rules text from `rules.md` | PluginMarkdown |
 | Join form, game over and notices | PluginDialog |
-| Notifications | PluginAlert |
+| Notifications | PluginToast |
 | Button hints | PluginTooltip |
 | Page, connection and dice model loaders | PluginLoadingOverlay |
 | Player count in the 3D game | PluginNumberInput |
@@ -76,8 +76,10 @@ The interface is Bootstrap 5.3 with [Themestrap](https://github.com/daemondevin/
 | Animated scores | PluginCounter |
 | Show and hide the player list | PluginCollapsible |
 | Fades on the chat, the rules and the score table | PluginScrollShadow |
-| Cusstom scrollbars in panels | PluginScrollbar |
+| Light and dark theme toggle on every page | PluginDarkMode |
 | Remembering your name and seat | StorageBin (`themestrap.fn.createStorage`) |
+
+The theme follows the system setting until a player presses the sun or moon button, then that choice is kept in the browser and shared by every tab.
 
 To update Themestrap, copy the same files from the Themestrap repository into `public/vendor/themestrap/`.
 

@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const Game = require("./game");
+const Game = require("./gameclass");
 
 const port = process.env.PORT || 3030;
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -154,15 +154,21 @@ io.on("connection", (socket) => {
     if (!reply(result)) return;
 
     announce(game, {
-      type: result.farkle ? "farkle" : "roll",
+      type: result.sixOfAKind ? "sixkind" : result.farkle ? "farkle" : "roll",
       player: player.name,
       thrown: result.thrown,
       gained: result.gained,
       hotDice: result.hotDice,
       hotDiceReady: Boolean(result.hotDiceReady),
       lost: result.lost || 0,
+      face: result.face || null,
     });
     broadcastState(game);
+
+    if (result.sixOfAKind) {
+      io.to(game.name).emit("gamewon", game.winner);
+      return;
+    }
 
     if (result.farkle) {
       // Leave the farkled dice on screen for a moment, then pass the dice on
@@ -170,8 +176,13 @@ io.on("connection", (socket) => {
       clearTimeout(game.farkleTimer);
       game.farkleTimer = setTimeout(() => {
         if (games.get(game.name) !== game || game.turnId !== turnId || game.phase !== "farkled") return;
-        game.nextTurn();
-        announce(game, { type: "turn", player: game.currentPlayer().name });
+        // A farkle in the final round still uses up that player's last turn
+        if (game.finishTurn()) {
+          announce(game, { type: "won", player: game.winner.name, winner: game.winner });
+          io.to(game.name).emit("gamewon", game.winner);
+        } else {
+          announce(game, { type: "turn", player: game.currentPlayer().name });
+        }
         broadcastState(game);
       }, FARKLE_PAUSE_MS);
     }
@@ -183,10 +194,17 @@ io.on("connection", (socket) => {
     const result = game.bank(socket.id, keep);
     if (!reply(result)) return;
 
-    announce(game, { type: result.won ? "won" : "bank", player: result.player.name, banked: result.banked });
-    if (result.won) {
-      io.to(game.name).emit("gamewon", { name: result.player.name, score: result.player.score });
-    }
+    const fr = game.finalRound;
+    announce(game, {
+      type: result.won ? "won" : result.finalRoundStarted ? "final" : "bank",
+      player: result.player.name,
+      banked: result.banked,
+      score: result.player.score,
+      tookLead: Boolean(result.tookLead),
+      target: fr ? fr.target : null,
+      winner: result.won ? game.winner : null,
+    });
+    if (result.won) io.to(game.name).emit("gamewon", game.winner);
     broadcastState(game);
   });
 
@@ -213,13 +231,20 @@ io.on("connection", (socket) => {
     clearTimeout(player.leaveTimer);
     player.leaveTimer = setTimeout(() => {
       if (player.connected || games.get(current.name) !== current) return;
-      const hadTurn = current.started && current.currentPlayer() === player;
+      const wasStarted = current.started;
+      const hadTurn = wasStarted && current.currentPlayer() === player;
       if (!current.removePlayerById(player.id)) return;
 
       console.log(`${player.name} left game ${current.name}`);
       io.to(current.name).emit("playerDisconect", { name: player.name, hadTurn });
       if (current.players.length) {
-        announce(current, { type: "left", player: player.name });
+        // Leaving can end the final round when the leaver was the last one still to play
+        if (wasStarted && !current.started && current.winner) {
+          announce(current, { type: "won", player: current.winner.name, winner: current.winner });
+          io.to(current.name).emit("gamewon", current.winner);
+        } else {
+          announce(current, { type: "left", player: player.name });
+        }
         broadcastState(current);
       } else {
         removeGameIfEmpty(current);

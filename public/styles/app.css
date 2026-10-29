@@ -9,6 +9,13 @@
     --app-panel-text: #eef2f6;
     --app-card-radius: .75rem;
     --app-page: #e9ecef;
+    --app-card-bg: #f6f6f6;
+    --app-card-tint: linear-gradient(transparent, transparent);
+    --app-turn-bg: #eaf3fb;
+    --app-float-bg: rgba(255, 255, 255, .95);
+    --app-track: rgba(0, 0, 0, .06);
+    --app-logo-ink: #1c1d1e;
+    --app-logo-sub: #333333;
     --bs-primary: var(--app-accent);
     --bs-primary-rgb: 33, 133, 208;
     --bs-link-color: var(--app-accent);
@@ -22,7 +29,8 @@
 }
 
 body {
-    background: var(--app-page);
+    background: var(--app-page) url("../img/dice.png") center / cover no-repeat;
+    background-blend-mode: overlay;
     min-height: 100vh;
 }
 
@@ -48,7 +56,7 @@ body {
 .app-card {
     position: relative;
     overflow: hidden;
-    background: #f6f6f6 url("../img/background.png") center / cover no-repeat;
+    background: var(--app-card-tint), var(--app-card-bg) url("../img/background.png") center / cover no-repeat;
     border-top: 3px solid var(--app-accent);
     border-radius: var(--app-card-radius);
     box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 10px 30px rgba(0, 0, 0, .08);
@@ -77,6 +85,7 @@ body {
     display: block;
     width: 100%;
     height: auto;
+    pointer-events: none; 
     user-select: none;
 }
 
@@ -130,7 +139,7 @@ body {
     font-weight: 700;
     padding-bottom: .35rem;
     margin-bottom: .6rem;
-    border-bottom: 1px solid rgba(0, 0, 0, .1);
+    border-bottom: 1px solid var(--bs-border-color-translucent);
 }
 
 .lead-text {
@@ -173,8 +182,6 @@ body {
     grid-template-columns: 1fr auto;
     gap: 1.25rem;
     align-items: center;
-    padding-bottom: 0.5rem;
-    padding-top: 0.5rem;
 }
 
 .dice-board .ts-dice {
@@ -186,14 +193,13 @@ body {
     display: flex;
     flex-direction: column;
     gap: .5rem;
-    min-width: 7rem;
+    min-width: 9.5rem;
 }
 
 .board-buttons .btn {
     display: flex;
     align-items: center;
     gap: .5rem;
-    justify-content: space-around;
 }
 
 @media (max-width: 575.98px) {
@@ -234,7 +240,7 @@ body {
 }
 
 .player-row {
-    padding: .75rem .75rem;
+    padding: .55rem .75rem;
 }
 
 .player-row .player-line {
@@ -266,7 +272,7 @@ body {
 }
 
 .player-row.is-turn .turn-dot { visibility: visible; }
-.player-row.is-turn { background: #eaf3fb; }
+.player-row.is-turn { background: var(--app-turn-bg); }
 .player-row.is-away { opacity: .55; }
 .player-row [data-plugin-progress-bar] { margin-top: .35rem; }
 
@@ -289,27 +295,23 @@ body {
 
 /* Drawers */
 .app-drawer [data-drawer-panel] {
-    width: min(34rem, 100vw);
+    --ts-drw-side-w: min(35rem, 100vw);
     display: flex;
     flex-direction: column;
-    color: var(--app-panel-text);
-    --ts-drw-side-w: min(35rem, 100vw);
 }
 
 .app-drawer .drawer-head {
-    color: var(--app-panel-text);
     display: flex;
     align-items: center;
     gap: .5rem;
     padding-bottom: .5rem;
     margin-bottom: .5rem;
-    border-bottom: 1px solid rgba(0, 0, 0, .1);
+    border-bottom: 1px solid var(--bs-border-color-translucent);
 }
 
 .app-drawer .drawer-head [data-drawer-title] {
     flex: 1;
     margin: 0;
-    color: var(--app-panel-text);
 }
 
 .rules-md table { font-size: .95rem; }
@@ -342,7 +344,7 @@ body {
     max-height: 46vh;
     overflow-y: auto;
     z-index: 20;
-    background: rgba(255, 255, 255, .95);
+    background: var(--app-float-bg);
     border-top: 3px solid var(--app-accent);
 }
 
@@ -388,7 +390,7 @@ body {
 /* PluginToast countdown bar (the plugin leaves these two rules to the page) */
 .hljs-toast-progress {
     height: 3px;
-    background: rgba(0, 0, 0, .06);
+    background: var(--app-track);
     overflow: hidden;
 }
 
@@ -396,4 +398,114 @@ body {
     height: 100%;
     width: 100%;
     background: currentColor;
+}
+
+/* Light and dark theme toggle (PluginDarkMode fills it with a sun or moon icon) */
+.app-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.app-theme-toggle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+}
+
+/* Dark theme
+   Tier 1 follows the system setting, tier 2 is the toggle's choice (PluginDarkMode puts the dark
+   class and data-bs-theme on <html>), tier 3 brings back the light look when the toggle picks light
+   on a system that prefers dark. Bootstrap styles its own components from data-bs-theme. */
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --app-page: #10161d;
+        --app-card-bg: #18212b;
+        --app-card-tint: linear-gradient(rgba(16, 23, 31, .86), rgba(16, 23, 31, .86));
+        --app-turn-bg: #1b3247;
+        --app-float-bg: rgba(30, 41, 57, .95);
+        --app-track: rgba(255, 255, 255, .1);
+        --app-logo-ink: #e9eef3;
+        --app-logo-sub: #b8c2cc;
+        --bs-link-color: #5eaee8;
+        --bs-link-hover-color: #8cc5ee;
+    }
+}
+
+html.dark,
+[data-bs-theme="dark"] {
+    --app-page: #10161d;
+    --app-card-bg: #18212b;
+    --app-card-tint: linear-gradient(rgba(16, 23, 31, .86), rgba(16, 23, 31, .86));
+    --app-turn-bg: #1b3247;
+    --app-float-bg: rgba(30, 41, 57, .95);
+    --app-track: rgba(255, 255, 255, .1);
+    --app-logo-ink: #e9eef3;
+    --app-logo-sub: #b8c2cc;
+    --bs-link-color: #5eaee8;
+    --bs-link-hover-color: #8cc5ee;
+}
+
+[data-bs-theme="light"] {
+    --app-page: #e9ecef;
+    --app-card-bg: #f6f6f6;
+    --app-card-tint: linear-gradient(transparent, transparent);
+    --app-turn-bg: #eaf3fb;
+    --app-float-bg: rgba(255, 255, 255, .95);
+    --app-track: rgba(0, 0, 0, .06);
+    --app-logo-ink: #1c1d1e;
+    --app-logo-sub: #333333;
+    --bs-link-color: var(--app-accent);
+    --bs-link-hover-color: var(--app-accent-dark);
+}
+
+/* Bootstrap keeps .btn-light and .btn-dark the same in both themes, which glares or vanishes on a dark card */
+html.dark .btn-light,
+[data-bs-theme="dark"] .btn-light {
+    --bs-btn-color: #e9ecef;
+    --bs-btn-bg: #2b3542;
+    --bs-btn-border-color: #3d4856;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #354152;
+    --bs-btn-hover-border-color: #4a5563;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #3d4856;
+    --bs-btn-active-border-color: #4a5563;
+    --bs-btn-disabled-color: #9aa5b1;
+    --bs-btn-disabled-bg: #2b3542;
+    --bs-btn-disabled-border-color: #3d4856;
+}
+
+html.dark .btn-dark,
+[data-bs-theme="dark"] .btn-dark {
+    --bs-btn-bg: #343e4b;
+    --bs-btn-border-color: #4a5563;
+    --bs-btn-hover-bg: #414d5c;
+    --bs-btn-hover-border-color: #56616f;
+    --bs-btn-active-bg: #4a5563;
+    --bs-btn-active-border-color: #56616f;
+}
+
+/* PluginDialog only follows the system setting, so it is told about the toggle here */
+html.dark [data-dialog-panel],
+[data-bs-theme="dark"] [data-dialog-panel] {
+    background: #1e2939;
+    color: #f3f4f6;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .55), 0 4px 12px rgba(0, 0, 0, .3);
+}
+
+html.dark [data-dialog-description],
+[data-bs-theme="dark"] [data-dialog-description] {
+    color: #9ca3af;
+}
+
+[data-bs-theme="light"] [data-dialog-panel] {
+    background: #fff;
+    color: #212529;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .25), 0 4px 12px rgba(0, 0, 0, .12);
+}
+
+[data-bs-theme="light"] [data-dialog-description] {
+    color: #6b7280;
 }

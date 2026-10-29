@@ -1,11 +1,32 @@
 // Run with: npm test
 // Checks the game rules directly, then plays through a server with several socket clients.
 const assert = require("assert");
-const { scoreSelection, hasScoringDice } = require("../public/scripts/scoring.js");
+const crypto = require("crypto");
+const { scoreSelection, hasScoringDice, isSixOfAKind } = require("../public/scripts/scoring.js");
 
 process.env.PORT = "0";
 process.env.LEAVE_GRACE_MS = "400";
-const Game = require("../game");
+// High enough that the random socket game never reaches it, the final round tests set scores directly
+process.env.WINNING_SCORE = "50000";
+const Game = require("../gameclass");
+
+// Makes every die the server throws show face until restore() is called
+function loadDice(face) {
+  const real = crypto.randomInt;
+  crypto.randomInt = (min, max) => (min === 1 && max === 7 ? face : real(min, max));
+  return () => (crypto.randomInt = real);
+}
+
+// Puts the current player in the middle of a turn: turnScore already scored, plus a fresh
+// throw of 1 2 3 4 6 6 where keeping the 1 (index 0) adds 100
+function midTurn(g, turnScore) {
+  g.phase = "rolled";
+  g.turnScore = turnScore;
+  g.dice.forEach((d, i) => {
+    d.value = [1, 2, 3, 4, 6, 6][i];
+    d.held = false;
+  });
+}
 
 let passed = 0;
 async function test(name, fn) {
@@ -42,12 +63,22 @@ async function engineTests() {
 
   await test("scoring matches the rules page", () => {
     const cases = [
-      [[1], 100], [[5], 50], [[1, 1, 1], 1000], [[3, 3, 3], 300], [[2, 2, 2, 2], 1000],
-      [[6, 6, 6, 6, 6], 2000], [[4, 4, 4, 4, 4, 4], 3000], [[1, 2, 3, 4, 5, 6], 2500],
-      [[2, 2, 3, 3, 6, 6], 1500], [[2, 2, 2, 2, 6, 6], 1500], [[1, 2], 0], [[2, 3, 4, 6, 6, 3], 0],
+      [[1], 100], [[5], 50], [[1, 1], 200], [[1, 5], 150],
+      // Three of a kind, doubled for every extra die
+      [[1, 1, 1], 1000], [[1, 1, 1, 1], 2000], [[1, 1, 1, 1, 1], 4000],
+      [[2, 2, 2], 200], [[2, 2, 2, 2], 400], [[2, 2, 2, 2, 2], 800],
+      [[3, 3, 3], 300], [[3, 3, 3, 3], 600], [[3, 3, 3, 3, 3], 1200],
+      [[5, 5, 5, 5], 1000], [[6, 6, 6, 6, 6], 2400],
+      [[1, 2, 3, 4, 5, 6], 750], [[2, 2, 3, 3, 6, 6], 1500],
+      // Four of a kind plus a pair: three pairs when that is worth more
+      [[2, 2, 2, 2, 6, 6], 1500], [[1, 1, 1, 1, 5, 5], 2100],
+      [[3, 3, 3, 1, 5], 450], [[1, 2], 0], [[2, 3, 4, 6, 6, 3], 0],
     ];
     for (const [values, expected] of cases) assert.strictEqual(scoreSelection(values), expected, values.join(""));
     assert.strictEqual(hasScoringDice([2, 3, 4, 6, 6, 3]), false);
+    assert.strictEqual(isSixOfAKind([4, 4, 4, 4, 4, 4]), true);
+    assert.strictEqual(isSixOfAKind([4, 4, 4, 4, 4]), false, "five dice are not six of a kind");
+    assert.strictEqual(isSixOfAKind([4, 4, 4, 4, 4, 1]), false);
   });
 
   await test("dice are independent objects", () => {
@@ -99,7 +130,8 @@ async function engineTests() {
     assert.strictEqual(r.ok, true);
     assert.strictEqual(r.hotDice, true);
     assert.strictEqual(r.thrown.length, 6);
-    assert.ok(r.farkle || g.turnScore === 450);
+    // Six fresh dice: a farkle, an outright win on six of a kind, or 150 more for the 1 and the 5
+    assert.ok(r.farkle || r.sixOfAKind || g.turnScore === 450);
   });
 
   await test("hot dice is reported as soon as every thrown die scores", () => {
@@ -149,23 +181,157 @@ async function engineTests() {
     assert.ok(farkled, "one die left should farkle sometimes");
   });
 
-  await test("banking to the winning score ends the game", () => {
+  await test("playing alone, banking to the winning score wins at once", () => {
     const g = new Game("abcde");
+    g.addPlayer("s1", "Ann");
+    g.start("s1");
+    const ann = g.currentPlayer();
+    ann.score = Game.WINNING_SCORE - 500;
+    ann.entered = true;
+    midTurn(g, 400);
+    const r = g.bank("s1", [0]);
+    assert.strictEqual(r.won, true);
+    assert.deepStrictEqual([g.winner.name, g.winner.reason, g.started], ["Ann", "score", false]);
+    assert.strictEqual(g.start("s1").ok, true, "host can play again");
+    assert.ok(g.players.every((p) => p.score === 0));
+    assert.strictEqual(g.finalRound, null);
+  });
+
+  // Ann, Bob and Cy, with Ann to play and everyone on the board
+  function threePlayers() {
+    const g = new Game("abcde");
+    ["Ann", "Bob", "Cy"].forEach((n, i) => g.addPlayer("s" + (i + 1), n));
+    g.start("s1");
+    g.turnIndex = 0;
+    g.beginTurn();
+    g.players.forEach((p) => (p.entered = true));
+    return g;
+  }
+  const byName = (g, n) => g.players.find((p) => p.name === n);
+
+  await test("reaching the winning score gives everyone else one last turn", () => {
+    const g = threePlayers();
+    byName(g, "Ann").score = Game.WINNING_SCORE - 500;
+    byName(g, "Bob").score = 2000;
+    byName(g, "Cy").score = 3000;
+
+    midTurn(g, 400);
+    let r = g.bank("s1", [0]);
+    assert.deepStrictEqual([r.ok, r.won, r.finalRoundStarted], [true, false, true]);
+    assert.strictEqual(g.started, true, "the game goes on");
+    assert.deepStrictEqual(g.finalRound.remaining, [byName(g, "Bob").id, byName(g, "Cy").id]);
+    assert.strictEqual(g.finalRound.target, Game.WINNING_SCORE);
+    assert.ok(g.publicState().finalRound, "browsers see the final round");
+
+    // Bob banks but stays behind, his last turn is used up
+    assert.strictEqual(g.currentPlayer().name, "Bob");
+    midTurn(g, 900);
+    r = g.bank("s2", [0]);
+    assert.deepStrictEqual([r.won, r.tookLead], [false, false]);
+    assert.deepStrictEqual(g.finalRound.remaining, [byName(g, "Cy").id]);
+
+    // Cy farkles, that ends the game and Ann wins
+    assert.strictEqual(g.currentPlayer().name, "Cy");
+    g.phase = "farkled";
+    assert.strictEqual(g.finishTurn(), true);
+    assert.deepStrictEqual([g.winner.name, g.winner.score, g.winner.reason, g.started], ["Ann", Game.WINNING_SCORE, "score", false]);
+    assert.strictEqual(g.finalRound, null);
+  });
+
+  await test("topping the leader takes the lead, a tie does not", () => {
+    const g = threePlayers();
+    byName(g, "Ann").score = Game.WINNING_SCORE - 500;
+    byName(g, "Bob").score = Game.WINNING_SCORE - 1000;
+    byName(g, "Cy").score = Game.WINNING_SCORE - 1000;
+    midTurn(g, 400);
+    g.bank("s1", [0]);
+
+    // Bob passes Ann, so Cy now has to beat Bob
+    midTurn(g, 1400);
+    let r = g.bank("s2", [0]);
+    assert.strictEqual(r.tookLead, true);
+    assert.deepStrictEqual([g.finalRound.leaderId, g.finalRound.target], [byName(g, "Bob").id, Game.WINNING_SCORE + 500]);
+
+    // Cy only ties Bob, which is not enough
+    midTurn(g, 1400);
+    r = g.bank("s3", [0]);
+    assert.deepStrictEqual([r.tookLead, r.won], [false, true]);
+    assert.strictEqual(g.winner.name, "Bob");
+  });
+
+  await test("six of a kind wins at once, in the final round and before getting on the board", () => {
+    // Before anyone is on the board
+    let g = new Game("abcde");
     g.addPlayer("s1", "Ann");
     g.addPlayer("s2", "Bob");
     g.start("s1");
-    const turn = g.currentPlayer();
-    turn.score = Game.WINNING_SCORE - 500;
-    turn.entered = true;
+    let restore = loadDice(4);
+    let r;
+    try {
+      r = g.roll(g.currentPlayer().socketId);
+    } finally {
+      restore();
+    }
+    assert.deepStrictEqual([r.ok, r.sixOfAKind, r.face], [true, true, 4]);
+    assert.deepStrictEqual([g.winner.reason, g.winner.face, g.started], ["six", 4, false]);
+    assert.ok(g.dice.every((d) => d.value === 4), "the winning dice stay on the table");
+
+    // During the final round, a player who is far behind still wins outright
+    g = threePlayers();
+    byName(g, "Ann").score = Game.WINNING_SCORE - 500;
+    midTurn(g, 400);
+    g.bank("s1", [0]);
+    assert.ok(g.finalRound);
+    restore = loadDice(2);
+    try {
+      r = g.roll("s2");
+    } finally {
+      restore();
+    }
+    assert.strictEqual(r.sixOfAKind, true);
+    assert.deepStrictEqual([g.winner.name, g.winner.reason, g.finalRound, g.started], ["Bob", "six", null, false]);
+
+    // Hot dice throws all six again, and that can be six of a kind too
+    g = threePlayers();
     g.phase = "rolled";
-    g.turnScore = 400;
-    g.dice.forEach((d, i) => (d.value = [1, 2, 3, 4, 6, 6][i]));
-    const r = g.bank(turn.socketId, [0]);
-    assert.strictEqual(r.won, true);
-    assert.strictEqual(g.winner.name, turn.name);
-    assert.strictEqual(g.started, false);
-    assert.strictEqual(g.start("s1").ok, true, "host can play again");
-    assert.ok(g.players.every((p) => p.score === 0));
+    g.dice.forEach((d, i) => {
+      d.value = [1, 5, 2, 2, 2, 1][i];
+      d.held = i >= 2;
+    });
+    restore = loadDice(6);
+    try {
+      r = g.roll("s1", [0, 1]);
+    } finally {
+      restore();
+    }
+    assert.deepStrictEqual([r.hotDice, r.sixOfAKind, g.winner.name], [true, true, "Ann"]);
+
+    // Five dice of the same face is not six of a kind
+    g = threePlayers();
+    g.phase = "rolled";
+    g.dice.forEach((d, i) => {
+      d.value = [1, 2, 3, 4, 6, 6][i];
+      d.held = false;
+    });
+    restore = loadDice(3);
+    try {
+      r = g.roll("s1", [0]);
+    } finally {
+      restore();
+    }
+    assert.deepStrictEqual([r.sixOfAKind, r.farkle, g.started], [undefined, false, true]);
+  });
+
+  await test("the last player still to go leaving ends the final round", () => {
+    const g = threePlayers();
+    byName(g, "Ann").score = Game.WINNING_SCORE - 500;
+    midTurn(g, 400);
+    g.bank("s1", [0]);
+    g.removePlayerById(byName(g, "Cy").id);
+    assert.strictEqual(g.started, true, "Bob still has his turn");
+    assert.strictEqual(g.currentPlayer().name, "Bob");
+    g.removePlayerById(byName(g, "Bob").id);
+    assert.deepStrictEqual([g.started, g.winner && g.winner.name], [false, "Ann"]);
   });
 
   await test("first bank needs the entry roll, later banks need the minimum", () => {
@@ -306,7 +472,8 @@ async function serverTests() {
     let farkles = 0;
     let refusedOnce = false;
     const banked = {};
-    while (turnsDone < 9) {
+    let endedBySix = false;
+    while (turnsDone < 9 && !endedBySix) {
       const turnId = a.state.turnPlayerId;
       const me = byId[turnId];
       const others = [a, b, c].filter((x) => x !== me);
@@ -322,6 +489,11 @@ async function serverTests() {
         const seq = me.state.lastEvent ? me.state.lastEvent.seq : 0;
         me.socket.emit("roll", { keep });
         await until(() => me.state.lastEvent && me.state.lastEvent.seq > seq);
+        if (me.state.lastEvent.type === "sixkind") {
+          // About 1 in 7,800 throws of six dice, the game ends there
+          endedBySix = true;
+          break;
+        }
         if (me.state.phase === "farkled") {
           farkles++;
           await until(() => a.state.turnPlayerId !== turnId && a.state.phase === "start", 6000);
@@ -352,9 +524,71 @@ async function serverTests() {
       }
       turnsDone++;
     }
+    if (endedBySix) {
+      console.log("       (the game ended early on a six of a kind, restarting)");
+      a.socket.emit("GameStart");
+      await until(() => a.state.started);
+      return;
+    }
     for (const p of a.state.players) assert.strictEqual(p.score, banked[p.id] || 0, `${p.name} score`);
     assert.ok(refusedOnce, "a low bank was tried and refused");
     console.log(`       (9 turns, ${farkles} farkles, scores ${a.state.players.map((p) => p.score).join(", ")})`);
+  });
+
+  await test("final round over sockets: last turns, a lead change, then the winner", async () => {
+    const game = games.get(room);
+    const clientOf = (id) => [a, b, c].find((x) => x.me.id === id);
+    game.players.forEach((p) => (p.entered = true));
+    const first = game.currentPlayer();
+    const [second, third] = [1, 2].map((k) => game.players[(game.turnIndex + k) % 3]);
+    first.score = Game.WINNING_SCORE - 500;
+    second.score = Game.WINNING_SCORE - 600;
+    third.score = 1000;
+
+    let seq = a.state.lastEvent.seq;
+    midTurn(game, 400);
+    clientOf(first.id).socket.emit("bank", { keep: [0] });
+    await until(() => a.state.lastEvent.seq > seq);
+    assert.strictEqual(a.state.lastEvent.type, "final");
+    assert.deepStrictEqual(a.state.finalRound.remaining, [second.id, third.id]);
+    assert.strictEqual(a.state.turnPlayerId, second.id);
+
+    seq = a.state.lastEvent.seq;
+    midTurn(game, 900);
+    clientOf(second.id).socket.emit("bank", { keep: [0] });
+    await until(() => a.state.lastEvent.seq > seq);
+    assert.deepStrictEqual([a.state.lastEvent.type, a.state.lastEvent.tookLead], ["bank", true]);
+    assert.strictEqual(a.state.finalRound.leaderId, second.id);
+
+    seq = a.state.lastEvent.seq;
+    midTurn(game, 400);
+    clientOf(third.id).socket.emit("bank", { keep: [0] });
+    await until(() => a.state.lastEvent.seq > seq);
+    assert.strictEqual(a.state.lastEvent.type, "won");
+    assert.deepStrictEqual([a.state.started, a.state.winner.id, a.state.winner.reason], [false, second.id, "score"]);
+    await until(() => c.events.some(([e, d]) => e === "gamewon" && d.id === second.id));
+
+    a.socket.emit("GameStart");
+    await until(() => a.state.started && a.state.finalRound === null);
+  });
+
+  await test("six of a kind over sockets wins on the spot", async () => {
+    const turn = [a, b, c].find((x) => x.me.id === a.state.turnPlayerId);
+    const seq = a.state.lastEvent.seq;
+    const restore = loadDice(5);
+    try {
+      turn.socket.emit("roll", { keep: [] });
+      await until(() => a.state.lastEvent.seq > seq);
+    } finally {
+      restore();
+    }
+    assert.deepStrictEqual([a.state.lastEvent.type, a.state.lastEvent.face], ["sixkind", 5]);
+    assert.deepStrictEqual([a.state.started, a.state.winner.id, a.state.winner.reason], [false, turn.me.id, "six"]);
+    assert.ok(a.state.dice.every((d) => d.value === 5), "browsers get the winning dice to show");
+    await until(() => b.events.some(([e, d]) => e === "gamewon" && d.reason === "six"));
+
+    a.socket.emit("GameStart");
+    await until(() => a.state.started);
   });
 
   await test("a reload keeps the seat, a longer absence gives it up", async () => {

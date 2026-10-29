@@ -81,6 +81,11 @@
     
     // Injected stylesheet — keyed to STYLE_ID so it runs only once per page
     const STYLE_ID = 'ts-dialog-styles';
+
+    // Open and close animations listen under their own namespace so a finished or
+    // abandoned animation can always be unbound (see _stopAnimation)
+    const ANIM_NS  = '.tsDialogAnim';
+    const ANIM_END = `animationend${ANIM_NS} webkitAnimationEnd${ANIM_NS}`;
     // CSS_TEXT is injected lazily by injectStyles() on first build (see below),
     // so loading this script never adds CSS to pages that don't use the plugin.
     const CSS_TEXT = `/**
@@ -98,7 +103,23 @@
  * .dialog-root.dialog-hidden      ← closed (display:none equivalent via CSS)
  * .dialog-root.dialog-is-open     ← open
  * body.dialog-scroll-lock         ← scroll disabled while a dialog is open
+ *
+ * Design tokens (override on :root or any ancestor):
+ * --ts-dlg-bg          panel background
+ * --ts-dlg-color       panel text color (unset = inherits the page color)
+ * --ts-dlg-text-muted  description text
+ * --ts-dlg-shadow      panel shadow
+ * --ts-dlg-backdrop    overlay color
+ * --ts-dlg-scrollbar   WebKit scrollbar thumb
  */
+:root {
+    --ts-dlg-bg         : #ffffff;
+    --ts-dlg-text-muted : #6b7280;
+    --ts-dlg-shadow     : 0 20px 60px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12);
+    --ts-dlg-backdrop   : rgba(0, 0, 0, 0.6);
+    --ts-dlg-scrollbar  : rgba(0, 0, 0, 0.2);
+}
+
 .dialog-root {
     position: fixed;
     inset: 0;                  /* top/right/bottom/left: 0 */
@@ -121,7 +142,7 @@
     position: absolute;
     inset: 0;
     z-index: 0;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: var(--ts-dlg-backdrop);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
 
@@ -139,11 +160,10 @@
 [data-dialog-panel] {
     position: relative;         /* sit above backdrop */
     z-index: 1;
-    background: #fff;
+    background: var(--ts-dlg-bg);
+    color: var(--ts-dlg-color);
     border-radius: 0.75rem;
-    box-shadow:
-        0 20px 60px rgba(0, 0, 0, 0.25),
-        0 4px  12px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--ts-dlg-shadow);
     padding: 2rem;
     width: 100%;
     max-width: 32rem;           /* ~512px — override with data-plugin-options if needed */
@@ -153,7 +173,7 @@
     /* Scrollbar styling (WebKit) */
     scrollbar-width: thin;
     &::-webkit-scrollbar       { width: 4px; }
-    &::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 2px; }
+    &::-webkit-scrollbar-thumb { background: var(--ts-dlg-scrollbar); border-radius: 2px; }
 }
 
 [data-dialog-title] {
@@ -167,7 +187,7 @@
 
 [data-dialog-description] {
     font-size: 0.9375rem;
-    color: #6b7280;
+    color: var(--ts-dlg-text-muted);
     margin-bottom: 1.5rem;
     line-height: 1.5;
 }
@@ -284,18 +304,37 @@ body.ts-scroll-lock {
     margin-bottom: 0.75rem;
 }
 
+/* Dark mode, tier 1: system preference */
 @media (prefers-color-scheme: dark) {
-    [data-dialog-panel] {
-        background: #1e2939;
-        color: #f3f4f6;
-        box-shadow:
-            0 20px 60px rgba(0, 0, 0, 0.55),
-            0 4px  12px rgba(0, 0, 0, 0.3);
+    :root {
+        --ts-dlg-bg         : #1e2939;
+        --ts-dlg-color      : #f3f4f6;
+        --ts-dlg-text-muted : #9ca3af;
+        --ts-dlg-shadow     : 0 20px 60px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.3);
+        --ts-dlg-backdrop   : rgba(0, 0, 0, 0.7);
+        --ts-dlg-scrollbar  : rgba(255, 255, 255, 0.15);
     }
+}
 
-    [data-dialog-description] {
-        color: #9ca3af;
-    }
+/* Dark mode, tier 2: explicit class or attribute (PluginDarkMode sets both on <html>) */
+html.dark,
+[data-bs-theme="dark"] {
+    --ts-dlg-bg         : #1e2939;
+    --ts-dlg-color      : #f3f4f6;
+    --ts-dlg-text-muted : #9ca3af;
+    --ts-dlg-shadow     : 0 20px 60px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.3);
+    --ts-dlg-backdrop   : rgba(0, 0, 0, 0.7);
+    --ts-dlg-scrollbar  : rgba(255, 255, 255, 0.15);
+}
+
+/* Dark mode, tier 3: explicit light override on a system that prefers dark */
+[data-bs-theme="light"] {
+    --ts-dlg-bg         : #ffffff;
+    --ts-dlg-color      : initial;
+    --ts-dlg-text-muted : #6b7280;
+    --ts-dlg-shadow     : 0 20px 60px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.12);
+    --ts-dlg-backdrop   : rgba(0, 0, 0, 0.6);
+    --ts-dlg-scrollbar  : rgba(0, 0, 0, 0.2);
 }
 
 /* Prompts built by PluginDialog.confirm() and PluginDialog.alert() */
@@ -461,6 +500,13 @@ body.ts-scroll-lock {
             const $el  = self.$el;
             const opts = self.options;
 
+            if (self._closing) {
+                // Opened again while the close animation was still running: cancel the close
+                // and keep the dialog up
+                self._closing = false;
+                self._stopAnimation();
+                return this;
+            }
             if (self.isOpen) return this;
             self.isOpen = true;
 
@@ -481,17 +527,9 @@ body.ts-scroll-lock {
                 .attr('aria-hidden', 'false');
 
             // Panel-level entrance animation
-            const $animTarget = self.$panel.length ? self.$panel : $el;
+            self._stopAnimation();
             if (opts.animationIn) {
-                $animTarget
-                    .addClass(`dialog-anim-enter ${opts.animationIn}`)
-                    .one('animationend webkitAnimationEnd', function () {
-                        $animTarget.removeClass(`dialog-anim-enter ${opts.animationIn}`);
-                    });
-
-                setTimeout(() => {
-                    $animTarget.removeClass(`dialog-anim-enter ${opts.animationIn}`);
-                }, opts.animationDuration + 50);
+                self._animate(`dialog-anim-enter ${opts.animationIn}`, () => self._stopAnimation());
             }
 
             // Focus management
@@ -516,29 +554,51 @@ body.ts-scroll-lock {
             const $el  = self.$el;
             const opts = self.options;
 
-            if (!self.isOpen) return this;
+            if (!self.isOpen || self._closing) return this;
+            self._closing = true;
 
             $el.off('keydown.dialog.trap');
-
-            const $animTarget = self.$panel.length ? self.$panel : $el;
+            self._stopAnimation();
 
             if (opts.animationOut) {
-                $animTarget
-                    .addClass(`dialog-anim-leave ${opts.animationOut}`)
-                    .one('animationend webkitAnimationEnd', function () {
-                        $animTarget.removeClass(`dialog-anim-leave ${opts.animationOut}`);
-                        self._finishClose();
-                    });
-
-                setTimeout(() => {
-                    $animTarget.removeClass(`dialog-anim-leave ${opts.animationOut}`);
-                    self._finishClose();
-                }, opts.animationDuration + 50);
+                self._animate(`dialog-anim-leave ${opts.animationOut}`, () => self._finishClose());
             } else {
                 self._finishClose();
             }
 
             return this;
+        }
+
+        // Runs a CSS animation on the panel and calls done once, when it ends or after
+        // animationDuration as a fallback. Only the panel's own animation counts, not ones
+        // bubbling up from content inside it.
+        _animate(classes, done) {
+            const $target = this.$panel.length ? this.$panel : this.$el;
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                done();
+            };
+            this._animClasses = classes;
+            $target.addClass(classes).on(ANIM_END, function (e) {
+                if (e.target === this) finish();
+            });
+            this._animTimer = setTimeout(finish, this.options.animationDuration + 50);
+        }
+
+        // Removes the running animation's classes, listener and fallback timer. Without this a
+        // close whose fallback timer won would leave its listener behind, and the next open
+        // animation's animationend would close the dialog again straight away.
+        _stopAnimation() {
+            clearTimeout(this._animTimer);
+            this._animTimer = null;
+            const $target = this.$panel.length ? this.$panel : this.$el;
+            $target.off(ANIM_NS);
+            if (this._animClasses) {
+                $target.removeClass(this._animClasses);
+                this._animClasses = null;
+            }
         }
 
         toggle() {
@@ -552,6 +612,8 @@ body.ts-scroll-lock {
 
             if (!self.isOpen) return;
             self.isOpen = false;
+            self._closing = false;
+            self._stopAnimation();
 
             $el
                 .addClass('dialog-hidden')
@@ -616,7 +678,11 @@ body.ts-scroll-lock {
             const self = this;
             const $el  = self.$el;
 
-            if (self.isOpen) self.close();
+            // Close at once, an animated close would finish on a destroyed instance
+            if (self.isOpen) {
+                self._stopAnimation();
+                self._finishClose();
+            }
 
             $(document).off(`click.dialog.${self._uid}`);
             $(document).off(`keydown.dialog.${self._uid}`);
