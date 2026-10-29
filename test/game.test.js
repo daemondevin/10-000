@@ -8,7 +8,7 @@ process.env.PORT = "0";
 process.env.LEAVE_GRACE_MS = "400";
 // High enough that the random socket game never reaches it, the final round tests set scores directly
 process.env.WINNING_SCORE = "50000";
-const Game = require("../gameclass");
+const Game = require("../gamec");
 
 // Makes every die the server throws show face until restore() is called
 function loadDice(face) {
