@@ -30,7 +30,7 @@ In the case a player can form melds from all the dice they threw, they have thro
 
 Once a player banks and reaches **10,000 or more**, the final round begins. Every other player gets **one last turn** to beat that score. To take the lead you have to finish your turn with more points than the leader, matching them is not enough. If you take the lead, the players still to go now have to beat your score instead.
 
-After everyone has had their last turn, the player with the highest score wins. The game doesn't end your turn for you when you pass the target, so keep rolling if you want to set the bar higher before banking, unless you just want to show off to Bill.
+After everyone has had their last turn, the player with the highest score wins. The game doesn't end your turn for you when you pass the target, so keep rolling if you want to set the bar higher before banking.
 
 ### Six of a kind wins
 
