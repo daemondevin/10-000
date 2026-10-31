@@ -42,7 +42,7 @@
  *   drawer:close — after the close transition ends   (receives instance as arg)
  *
  * Init.js wiring (DOMReady-immediate — drawers must be ready before any trigger fires):
- *   if ($.isFunction($.fn['themestrapPluginDrawer']) && $('[data-plugin-drawer]').length) {
+ *   if (typeof $.fn['themestrapPluginDrawer'] === 'function' && $('[data-plugin-drawer]').length) {
  *       $(() => {
  *           $('[data-plugin-drawer]:not(.manual)').each(function () {
  *               const $this = $(this);
@@ -119,7 +119,6 @@
     --ts-drw-ease        : cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-
 /* Root container */
 .drawer-root {
     position  : fixed;
@@ -133,7 +132,6 @@
         visibility     : hidden;
     }
 }
-
 
 /* Backdrop */
 [data-drawer-backdrop] {
@@ -151,7 +149,6 @@
     }
 }
 
-
 /* Panel — shared base */
 [data-drawer-panel] {
     position            : absolute;
@@ -167,7 +164,6 @@
     &::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 2px; }
 }
 
-
 /* Bottom drawer */
 .drawer-bottom [data-drawer-panel] {
     bottom        : 0;
@@ -181,7 +177,6 @@
 }
 .drawer-bottom.drawer-open [data-drawer-panel] { transform: translateY(0); }
 
-
 /* Top drawer */
 .drawer-top [data-drawer-panel] {
     top           : 0;
@@ -194,7 +189,6 @@
     transform     : translateY(-100%);
 }
 .drawer-top.drawer-open [data-drawer-panel] { transform: translateY(0); }
-
 
 /* Left drawer */
 .drawer-left [data-drawer-panel] {
@@ -213,7 +207,6 @@
 }
 .drawer-left.drawer-open [data-drawer-panel] { transform: translateX(0); }
 
-
 /* Right drawer */
 .drawer-right [data-drawer-panel] {
     top           : 0;
@@ -230,7 +223,6 @@
     transform     : translateX(100%);
 }
 .drawer-right.drawer-open [data-drawer-panel] { transform: translateX(0); }
-
 
 /* Drag handle — renders as a sticky full-width bar with a centred pill */
 [data-drawer-handle] {
@@ -285,7 +277,6 @@
     display : none;
 }
 
-
 /* Typography helpers */
 [data-drawer-title] {
     font-size    : 1.25rem;
@@ -303,13 +294,11 @@
     line-height  : 1.5;
 }
 
-
 /* Scroll-lock utility — shared with PluginDialog; redundant definition is harmless */
 body.ts-scroll-lock {
     overflow      : hidden;
     padding-right : var(--ts-scrollbar-width, 0px);
 }
-
 
 /* Dark mode — tier 1: system preference */
 @media (prefers-color-scheme: dark) {
@@ -362,7 +351,6 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
     --ts-drw-text-muted  : #6b7280;
 }
 
-
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
     [data-drawer-backdrop],
@@ -395,6 +383,7 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             this.$handle        = null;
             this.$previousFocus = null;
             this.isOpen         = false;
+            this._closing       = false;      // close transition running; open() can still reverse it
             this._uid           = uid('drawer');
             this._drag          = null;
             this._closeTimer    = null;
@@ -429,7 +418,8 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             const dir  = opts.direction;
 
             // ARIA role and modal flag
-            if (!$el.attr('role')) $el.attr('role', 'dialog');
+            self._addedRole = !$el.attr('role');
+            if (self._addedRole) $el.attr('role', 'dialog');
             $el.attr('aria-modal', 'true');
 
             // Auto-wire title → aria-labelledby
@@ -454,6 +444,7 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
                 if (!self.$backdrop.length) {
                     self.$backdrop = $('<div data-drawer-backdrop></div>');
                     $el.prepend(self.$backdrop);
+                    self._injectedBackdrop = true;
                 }
             }
 
@@ -464,6 +455,7 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             if (opts.showHandle && (dir === 'bottom' || dir === 'top')) {
                 self.$handle = $el.find('[data-drawer-handle]');
                 if (!self.$handle.length) {
+                    self._injectedHandle = true;
                     self.$handle = $('<div data-drawer-handle role="presentation"></div>');
                     if (dir === 'bottom') {
                         self.$panel.prepend(self.$handle);
@@ -547,7 +539,7 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             const handleEl = self.$handle[0];
             const isVert   = dir === 'bottom' || dir === 'top';
 
-            handleEl.addEventListener('pointerdown', function (e) {
+            const onDown = function (e) {
                 if (!self.isOpen) return;
 
                 // Capture so pointermove/up keep firing even outside the handle
@@ -565,9 +557,9 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
 
                 // Disable CSS transition while dragging for a 1:1 feel
                 $panel.css('transition', 'none');
-            });
+            };
 
-            handleEl.addEventListener('pointermove', function (e) {
+            const onMove = function (e) {
                 if (!self._drag) return;
 
                 const d   = self._drag;
@@ -578,8 +570,8 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
                 let raw = isVert ? (e.clientY - d.startY) : (e.clientX - d.startX);
 
                 // Clamp: only allow movement toward the dismiss edge
-                if (dir === 'bottom' && raw < 0) raw = 0;
-                if (dir === 'top'    && raw > 0) raw = 0;
+                if ((dir === 'bottom' || dir === 'right') && raw < 0) raw = 0;
+                if ((dir === 'top'    || dir === 'left')  && raw > 0) raw = 0;
 
                 d.delta = raw;
 
@@ -598,9 +590,9 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
                     ? `translateY(${raw}px)`
                     : `translateX(${raw}px)`
                 );
-            });
+            };
 
-            handleEl.addEventListener('pointerup', function () {
+            const onUp = function () {
                 if (!self._drag) return;
 
                 const d        = self._drag;
@@ -620,33 +612,35 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
                     // Continue animating from the current drag position to fully off-screen.
                     // The panel already has an inline transform from the drag — the transition
                     // will now run from there to the destination.
-                    const sign = (dir === 'bottom') ? 1 : -1;
+                    const sign = (dir === 'bottom' || dir === 'right') ? 1 : -1;
                     const dest = isVert
                         ? `translateY(${sign * size}px)`
                         : `translateX(${sign * size}px)`;
 
                     $panel.css('transform', dest);
 
-                    // Fade the backdrop out in sync by removing drawer-open
-                    $el.removeClass('drawer-open');
-
-                    // Schedule DOM cleanup after the transition finishes
-                    clearTimeout(self._closeTimer);
-                    self._closeTimer = setTimeout(() => {
-                        self._finishClose();
-                    }, opts.transitionDuration + 50);
+                    // The regular close path fades the backdrop, drops the focus
+                    // trap and schedules the cleanup
+                    self.close();
 
                 } else {
                     // Snap the panel back to the fully-open position
                     $panel.css('transform', '');
                 }
-            });
+            };
 
-            handleEl.addEventListener('pointercancel', function () {
+            const onCancel = function () {
                 if (!self._drag) return;
                 self._drag = null;
                 $panel.css({ transition: '', transform: '' });
-            });
+            };
+
+            handleEl.addEventListener('pointerdown',   onDown);
+            handleEl.addEventListener('pointermove',   onMove);
+            handleEl.addEventListener('pointerup',     onUp);
+            handleEl.addEventListener('pointercancel', onCancel);
+
+            self._dragListeners = { el: handleEl, onDown, onMove, onUp, onCancel };
         }
 
         open() {
@@ -655,15 +649,21 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             const opts = self.options;
 
             if (self.isOpen) return this;
-            self.isOpen = true;
 
-            // Cancel any pending close-cleanup from a prior close() call
+            // Opening again while the close transition runs: cancel the pending
+            // cleanup and slide back in. Focus restore keeps its original target.
+            const reopening = self._closing;
+            self._closing = false;
+            self.isOpen   = true;
+
             clearTimeout(self._closeTimer);
 
             // Clear any leftover inline transform from a drag-dismiss
             self.$panel.css('transform', '');
 
-            self.$previousFocus = $(document.activeElement);
+            if (!reopening) {
+                self.$previousFocus = $(document.activeElement);
+            }
 
             if (opts.scrollLock) {
                 $('body').addClass('ts-scroll-lock');
@@ -686,7 +686,7 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             setTimeout(() => self._focusFirst(), 50);
 
             // Focus trap
-            $el.on('keydown.drawer.trap', (e) => {
+            $el.off('keydown.drawer.trap').on('keydown.drawer.trap', (e) => {
                 if (e.key === 'Tab' || e.keyCode === 9) {
                     self._trapFocus(e);
                 }
@@ -704,6 +704,8 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             const opts = self.options;
 
             if (!self.isOpen) return this;
+            self.isOpen   = false;
+            self._closing = true;
 
             $el.off('keydown.drawer.trap');
 
@@ -729,9 +731,9 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
             const $el  = self.$el;
             const opts = self.options;
 
-            // Guard: open() may have been called during the close transition
-            if (!self.isOpen) return;
-            self.isOpen = false;
+            // Guard: open() may have reversed the close during the transition
+            if (!self._closing) return;
+            self._closing = false;
 
             // Clear any inline transform set by a drag-dismiss
             self.$panel.css('transform', '');
@@ -795,18 +797,35 @@ html.dark [data-drawer-panel]::-webkit-scrollbar-thumb,
 
             clearTimeout(self._closeTimer);
 
-            if (self.isOpen) {
-                self.isOpen = false;
-                $('body').removeClass('ts-scroll-lock');
+            if (self.isOpen || self._closing) {
+                self.isOpen   = false;
+                self._closing = false;
+                if (self.options.scrollLock) $('body').removeClass('ts-scroll-lock');
             }
+
+            if (self._dragListeners) {
+                const d = self._dragListeners;
+                d.el.removeEventListener('pointerdown',   d.onDown);
+                d.el.removeEventListener('pointermove',   d.onMove);
+                d.el.removeEventListener('pointerup',     d.onUp);
+                d.el.removeEventListener('pointercancel', d.onCancel);
+                self._dragListeners = null;
+            }
+            self._drag = null;
+
+            if (self._injectedHandle && self.$handle)     self.$handle.remove();
+            if (self._injectedBackdrop && self.$backdrop) self.$backdrop.remove();
+            if (self.$panel) self.$panel.css({ transform: '', transition: '' });
 
             $(document).off(`click.drawer.${self._uid}`);
             $(document).off(`keydown.drawer.${self._uid}`);
             $el.off('.drawer');
 
+            if (self._addedRole) $el.removeAttr('role');
+
             $el
                 .removeData(instanceName)
-                .removeAttr('role aria-modal aria-hidden aria-labelledby aria-describedby tabindex')
+                .removeAttr('aria-modal aria-hidden aria-labelledby aria-describedby tabindex')
                 .removeClass('drawer-root drawer-hidden drawer-is-open drawer-open drawer-bottom drawer-top drawer-left drawer-right');
 
             return this;
