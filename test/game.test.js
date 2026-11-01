@@ -411,6 +411,24 @@ async function engineTests() {
     assert.deepStrictEqual(g.selection, [], "a throw clears the picks");
   });
 
+  await test("every file the service worker stores exists, one missing file would stop the install", () => {
+    const path = require("path");
+    const { buildServiceWorker, PRECACHE_FIXED } = require("../pwa");
+    const warnings = [];
+    const warn = console.warn;
+    console.warn = (...args) => warnings.push(args.join(" "));
+    let sw;
+    try {
+      sw = buildServiceWorker(path.join(__dirname, "..", "public"));
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepStrictEqual(warnings, []);
+    const list = JSON.parse(sw.match(/const PRECACHE = (\[[\s\S]*?\]);/)[1]);
+    PRECACHE_FIXED.forEach((url) => assert.ok(list.includes(url), url));
+    assert.ok(list.some((url) => url.startsWith("/vendor/themestrap/js/components/")), "Themestrap plugins are stored");
+  });
+
   await test("publicState never exposes socket ids or tokens", () => {
     const g = new Game("abcde");
     g.addPlayer("secret-socket", "Ann");
@@ -449,6 +467,44 @@ async function serverTests() {
   }
 
   const { Name: room } = await (await fetch(`${base}/api/newgame`)).json();
+
+  await test("installable app: libraries, fonts and the service worker are served", async () => {
+    const urls = [
+      "/vendor/three/build/three.module.js",
+      "/vendor/three/examples/jsm/controls/OrbitControls.js",
+      "/vendor/cannon-es/cannon-es.js",
+      "/vendor/bootstrap/css/bootstrap.min.css",
+      "/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2",
+      "/vendor/jquery/jquery.min.js",
+      "/vendor/fonts/bruno-ace-sc/bruno-ace-sc-latin-400-normal.woff2",
+      "/styles/fonts.css",
+      "/manifest.webmanifest",
+      "/img/icons/icon-512.png",
+    ];
+    for (const url of urls) assert.strictEqual((await fetch(base + url)).status, 200, url);
+    assert.strictEqual((await fetch(base + "/vendor/three/package.json")).status, 404, "only the build and addons are exposed");
+
+    const sw = await fetch(base + "/sw.js");
+    assert.match(sw.headers.get("content-type"), /javascript/);
+    assert.strictEqual(sw.headers.get("cache-control"), "no-cache");
+    const text = await sw.text();
+    assert.match(text, /const VERSION = "[0-9a-f]{12}"/);
+    assert.ok(!text.includes("__PRECACHE__"));
+  });
+
+  await test("the Android and iOS apps may call the API and connect, other sites may not", async () => {
+    for (const origin of ["capacitor://localhost", "https://localhost"]) {
+      const api = await fetch(base + "/api/getrooms", { headers: { Origin: origin } });
+      assert.strictEqual(api.headers.get("access-control-allow-origin"), origin, `api from ${origin}`);
+      const poll = await fetch(base + "/socket.io/?EIO=4&transport=polling", { headers: { Origin: origin } });
+      assert.strictEqual(poll.status, 200);
+      assert.strictEqual(poll.headers.get("access-control-allow-origin"), origin, `socket from ${origin}`);
+    }
+    const other = await fetch(base + "/api/getrooms", { headers: { Origin: "https://elsewhere.example" } });
+    assert.strictEqual(other.headers.get("access-control-allow-origin"), null);
+    const otherPoll = await fetch(base + "/socket.io/?EIO=4&transport=polling", { headers: { Origin: "https://elsewhere.example" } });
+    assert.notStrictEqual(otherPoll.headers.get("access-control-allow-origin"), "https://elsewhere.example");
+  });
 
   await test("game page is served for a real room, unknown rooms go to the lobby", async () => {
     const ok = await fetch(`${base}/${room}`, { redirect: "manual" });

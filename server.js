@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const Game = require("./game");
+const { mountPwa } = require("./pwa");
 
 const port = process.env.PORT || 3030;
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -14,9 +15,27 @@ const LEAVE_GRACE_MS = Number(process.env.LEAVE_GRACE_MS) || 60 * 1000;
 const EMPTY_GAME_TTL_MS = 30 * 60 * 1000;
 const ROOM_NAME = /^[a-z]{5}$/;
 
+// The Android and iOS apps carry their own pages, so they call this server from another
+// origin: capacitor://localhost on iOS, https://localhost on Android. Set ALLOWED_ORIGINS
+// (comma separated) to change the list.
+const APP_ORIGINS = (process.env.ALLOWED_ORIGINS || "capacitor://localhost,https://localhost")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { cors: { origin: APP_ORIGINS } });
+
+// Same list for the lobby's /api calls. The website itself needs none of this.
+app.use("/api", (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && APP_ORIGINS.includes(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+    res.set("Vary", "Origin");
+  }
+  next();
+});
 
 // Every open game, keyed by its five letter name
 const games = new Map();
@@ -70,6 +89,9 @@ app.get("/api/newgame", (req, res) => {
 app.get("/api/getrooms", (req, res) => {
   res.json({ rooms: [...games.values()].map((g) => g.summary()) });
 });
+
+// Libraries, fonts and the service worker for the installable app
+mountPwa(app, { publicDir: PUBLIC_DIR });
 
 app.use(express.static(PUBLIC_DIR));
 

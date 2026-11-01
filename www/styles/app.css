@@ -1,0 +1,601 @@
+/* 10,000 with Friends
+   Shared styles for the lobby, the online game, the rules page and the 3D game.
+   Bootstrap 5.3 provides the layout and components, Themestrap plugins inject their own styles. */
+
+:root {
+    /* Room for the status bar, notch and home indicator when the page fills the screen
+       (viewport-fit=cover). iOS gives env(); Capacitor on Android also sets --safe-area-inset-*. */
+    --app-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+    --app-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+    --app-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    --app-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+    --app-accent: #2185d0;
+    --app-accent-dark: #1a69a4;
+    --app-panel: rgba(0, 0, 0, .66);
+    --app-panel-text: #eef2f6;
+    --app-card-radius: .75rem;
+    --app-page: #e9ecef;
+    --app-card-bg: #f6f6f6;
+    --app-card-tint: linear-gradient(transparent, transparent);
+    --app-turn-bg: #eaf3fb;
+    --app-float-bg: rgba(255, 255, 255, .95);
+    --app-track: rgba(0, 0, 0, .06);
+    --app-logo-ink: #1c1d1e;
+    --app-logo-sub: #333333;
+    --bs-primary: var(--app-accent);
+    --bs-primary-rgb: 33, 133, 208;
+    --bs-link-color: var(--app-accent);
+    --bs-link-hover-color: var(--app-accent-dark);
+    --bs-body-font-family: "Lato", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+    /* Themestrap tokens tuned to the game's colors */
+    --ts-ni-border-focus: var(--app-accent);
+    --ts-ni-focus-ring: 0 0 0 3px rgba(33, 133, 208, .25);
+    --ts-ss-color: #000;
+}
+
+body {
+    background: var(--app-page) url("../img/dice.png") center / cover no-repeat;
+    background-blend-mode: overlay;
+    min-height: 100vh;
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--app-accent);
+    --bs-btn-border-color: var(--app-accent);
+    --bs-btn-hover-bg: var(--app-accent-dark);
+    --bs-btn-hover-border-color: var(--app-accent-dark);
+    --bs-btn-active-bg: var(--app-accent-dark);
+    --bs-btn-active-border-color: var(--app-accent-dark);
+    --bs-btn-disabled-bg: var(--app-accent);
+    --bs-btn-disabled-border-color: var(--app-accent);
+}
+
+/* Page frame */
+
+.app-shell {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding:
+        calc(1.5rem + var(--app-safe-top))
+        calc(1rem + var(--app-safe-right))
+        calc(3rem + var(--app-safe-bottom))
+        calc(1rem + var(--app-safe-left));
+}
+
+/* PluginAlert notifications stay below the status bar (body raises this above the plugin's own rule) */
+body .alert-toast-stack {
+    top: calc(1.25rem + var(--app-safe-top));
+    right: calc(1.25rem + var(--app-safe-right));
+}
+
+.app-card {
+    position: relative;
+    overflow: hidden;
+    background: var(--app-card-tint), var(--app-card-bg) url("../img/background.png") center / cover no-repeat;
+    border-top: 3px solid var(--app-accent);
+    border-radius: var(--app-card-radius);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 10px 30px rgba(0, 0, 0, .08);
+    padding: 1rem 1rem 1.25rem;
+}
+
+.app-card > :not([data-plugin-particles]) {
+    position: relative;
+    z-index: 1;
+}
+
+.app-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: flex-start;
+}
+
+.app-logo {
+    display: block;
+    width: min(100%, 26rem);
+    margin: 0 auto;
+}
+
+.app-logo svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    pointer-events: none; 
+    user-select: none;
+}
+
+.app-card hr {
+    margin: .75rem 0 1rem;
+    opacity: .15;
+}
+
+/* Dark panel with a white card inside, the look of the original dimmer */
+.app-panel {
+    background: var(--app-panel);
+    color: var(--app-panel-text);
+    border-top: 2px solid var(--app-accent);
+    border-radius: .5rem;
+    padding: .9rem;
+    backdrop-filter: blur(2px);
+}
+
+.app-panel .app-panel-title {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-bottom: .75rem;
+}
+
+.app-panel .app-panel-title i {
+    font-size: 1.9rem;
+    line-height: 1;
+}
+
+.app-panel .app-panel-title h1,
+.app-panel .app-panel-title h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.app-panel .app-panel-title small {
+    display: block;
+    opacity: .8;
+    font-size: .85rem;
+}
+
+.app-panel .card {
+    --bs-card-border-radius: .4rem;
+    color: var(--bs-body-color);
+}
+
+.app-panel .section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding-bottom: .35rem;
+    margin-bottom: .6rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.lead-text {
+    text-align: justify;
+    margin-bottom: 0;
+}
+
+.app-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-top: .9rem;
+}
+
+/* Open games list in the lobby */
+.open-games .list-group-item {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.open-games .list-group-item .bi {
+    font-size: 1.4rem;
+    color: var(--app-accent);
+}
+
+/* Online game */
+
+#turnStatus {
+    min-height: 1.5em;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.dice-board {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1.25rem;
+    align-items: center;
+}
+
+.dice-board .ts-dice {
+    --ts-dice-size: 3.4rem;
+    justify-content: center;
+}
+
+.board-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    min-width: 9.5rem;
+}
+
+.board-buttons .btn {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+@media (max-width: 575.98px) {
+    .dice-board { grid-template-columns: 1fr; }
+    .dice-board .ts-dice { --ts-dice-size: 2.9rem; }
+    .board-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; min-width: 0; }
+}
+
+/* Current player's points this turn, counted with PluginCounter */
+.turn-score {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .35rem .75rem;
+    margin-bottom: .35rem;
+}
+
+.turn-score-who {
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+}
+
+.turn-score-value {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .35rem;
+    font-size: 2rem;
+    font-weight: 300;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-accent);
+}
+
+.turn-score-value small {
+    font-size: .8rem;
+    font-weight: 400;
+    color: var(--bs-secondary-color);
+}
+
+.turn-score-pick {
+    min-width: 6rem;
+    font-weight: 700;
+    color: var(--bs-success);
+}
+
+.turn-score.is-farkle .turn-score-value { color: var(--bs-danger); }
+
+/* 3D table in the online game, in place of the flat dice */
+.dice-3d {
+    position: relative;
+    height: clamp(15rem, 46vh, 24rem);
+    border-radius: .5rem;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 35%, rgba(33, 133, 208, .08), transparent 70%);
+    touch-action: none;
+}
+
+.dice-3d canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.dice-board.is-3d { grid-template-columns: 1fr; }
+
+.dice-board.is-3d .board-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    min-width: 0;
+}
+
+#toggle3d.active {
+    background: var(--app-accent);
+    border-color: var(--app-accent);
+    color: #fff;
+}
+
+.players-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    margin: 1rem 0 .5rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--app-panel-text);
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.players-toggle::before {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, .25);
+}
+
+.players-toggle [data-collapsible-chevron] {
+    transition: transform .2s ease;
+}
+
+.players-toggle[aria-expanded="false"] [data-collapsible-chevron] {
+    transform: rotate(-90deg);
+}
+
+.player-row {
+    padding: .55rem .75rem;
+}
+
+.player-row .player-line {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.player-row .player-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-row .player-score {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.player-row .turn-dot {
+    width: .65rem;
+    height: .65rem;
+    border-radius: 50%;
+    background: var(--app-accent);
+    flex: 0 0 auto;
+    visibility: hidden;
+}
+
+.player-row.is-turn .turn-dot { visibility: visible; }
+.player-row.is-turn { background: var(--app-turn-bg); }
+.player-row.is-away { opacity: .55; }
+.player-row [data-plugin-progress-bar] { margin-top: .35rem; }
+
+/* Chat */
+.chat-log {
+    height: calc(100vh - 13rem);
+    min-height: 12rem;
+    overflow-y: auto;
+    padding: .25rem 0;
+}
+
+.chat-line {
+    padding: .3rem .25rem;
+    word-wrap: break-word;
+}
+
+.chat-line .chat-sender { font-weight: 700; }
+.chat-line.is-mine .chat-sender { color: var(--app-accent); }
+.chat-line.is-system { font-style: italic; opacity: .7; }
+
+/* Drawers */
+.app-drawer [data-drawer-panel] {
+    --ts-drw-side-w: min(35rem, 100vw);
+    display: flex;
+    flex-direction: column;
+}
+
+.app-drawer .drawer-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding-bottom: .5rem;
+    margin-bottom: .5rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.app-drawer .drawer-head [data-drawer-title] {
+    flex: 1;
+    margin: 0;
+}
+
+.rules-md table { font-size: .95rem; }
+.rules-md td:last-child { font-size: 1.35rem; line-height: 1; letter-spacing: .05em; white-space: nowrap; }
+
+/* Standalone rules page */
+.rules-page .card-body h2:first-child { margin-top: 0; }
+
+/* 3D single player game */
+
+.single-player #game-view {
+    position: fixed;
+    inset: 0;
+}
+
+.single-player #game-area {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    touch-action: none;
+}
+
+.single-player #game-panel {
+    position: fixed;
+    right: calc(1rem + var(--app-safe-right));
+    bottom: calc(1rem + var(--app-safe-bottom));
+    width: min(48rem, calc(100vw - 2rem));
+    max-height: 46vh;
+    overflow-y: auto;
+    z-index: 20;
+    background: var(--app-float-bg);
+    border-top: 3px solid var(--app-accent);
+}
+
+.single-player .stat {
+    text-align: center;
+    min-width: 6.5rem;
+}
+
+.single-player .stat .stat-value {
+    font-size: 2rem;
+    font-weight: 300;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.single-player .stat .stat-label {
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.single-player #score-table td,
+.single-player #score-table th { vertical-align: middle; white-space: nowrap; }
+.single-player #score-table .holding .bi { font-size: 1.15rem; margin-right: .1rem; }
+.single-player #score-table tr.is-turn td:first-child { box-shadow: inset 3px 0 0 var(--app-accent); font-weight: 700; }
+.single-player #score-table .actions .btn { margin: .1rem; }
+
+@media (max-width: 700px) {
+    .single-player #game-panel {
+        right: calc(.5rem + var(--app-safe-right));
+        bottom: calc(.5rem + var(--app-safe-bottom));
+        width: calc(100vw - 1rem);
+        max-height: 52vh;
+        padding: .6rem;
+    }
+    .single-player #score-table th:nth-child(2),
+    .single-player #score-table td:nth-child(2) { display: none; }
+    .single-player #score-table .actions .btn { padding: .3rem .45rem; font-size: .8rem; }
+    .single-player .stat .stat-value { font-size: 1.6rem; }
+}
+
+/* PluginToast countdown bar (the plugin leaves these two rules to the page) */
+.hljs-toast-progress {
+    height: 3px;
+    background: var(--app-track);
+    overflow: hidden;
+}
+
+.hljs-toast-progress-bar {
+    height: 100%;
+    width: 100%;
+    background: currentColor;
+}
+
+/* Light and dark theme toggle (PluginDarkMode fills it with a sun or moon icon) */
+.app-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.app-theme-toggle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+}
+
+/* Dark theme
+   Tier 1 follows the system setting, tier 2 is the toggle's choice (PluginDarkMode puts the dark
+   class and data-bs-theme on <html>), tier 3 brings back the light look when the toggle picks light
+   on a system that prefers dark. Bootstrap styles its own components from data-bs-theme. */
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --app-page: #10161d;
+        --app-card-bg: #18212b;
+        --app-card-tint: linear-gradient(rgba(16, 23, 31, .86), rgba(16, 23, 31, .86));
+        --app-turn-bg: #1b3247;
+        --app-float-bg: rgba(30, 41, 57, .95);
+        --app-track: rgba(255, 255, 255, .1);
+        --app-logo-ink: #e9eef3;
+        --app-logo-sub: #b8c2cc;
+        --bs-link-color: #5eaee8;
+        --bs-link-hover-color: #8cc5ee;
+    }
+}
+
+html.dark,
+[data-bs-theme="dark"] {
+    --app-page: #10161d;
+    --app-card-bg: #18212b;
+    --app-card-tint: linear-gradient(rgba(16, 23, 31, .86), rgba(16, 23, 31, .86));
+    --app-turn-bg: #1b3247;
+    --app-float-bg: rgba(30, 41, 57, .95);
+    --app-track: rgba(255, 255, 255, .1);
+    --app-logo-ink: #e9eef3;
+    --app-logo-sub: #b8c2cc;
+    --bs-link-color: #5eaee8;
+    --bs-link-hover-color: #8cc5ee;
+}
+
+[data-bs-theme="light"] {
+    --app-page: #e9ecef;
+    --app-card-bg: #f6f6f6;
+    --app-card-tint: linear-gradient(transparent, transparent);
+    --app-turn-bg: #eaf3fb;
+    --app-float-bg: rgba(255, 255, 255, .95);
+    --app-track: rgba(0, 0, 0, .06);
+    --app-logo-ink: #1c1d1e;
+    --app-logo-sub: #333333;
+    --bs-link-color: var(--app-accent);
+    --bs-link-hover-color: var(--app-accent-dark);
+}
+
+/* Bootstrap keeps .btn-light and .btn-dark the same in both themes, which glares or vanishes on a dark card */
+html.dark .btn-light,
+[data-bs-theme="dark"] .btn-light {
+    --bs-btn-color: #e9ecef;
+    --bs-btn-bg: #2b3542;
+    --bs-btn-border-color: #3d4856;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: #354152;
+    --bs-btn-hover-border-color: #4a5563;
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #3d4856;
+    --bs-btn-active-border-color: #4a5563;
+    --bs-btn-disabled-color: #9aa5b1;
+    --bs-btn-disabled-bg: #2b3542;
+    --bs-btn-disabled-border-color: #3d4856;
+}
+
+html.dark .btn-dark,
+[data-bs-theme="dark"] .btn-dark {
+    --bs-btn-bg: #343e4b;
+    --bs-btn-border-color: #4a5563;
+    --bs-btn-hover-bg: #414d5c;
+    --bs-btn-hover-border-color: #56616f;
+    --bs-btn-active-bg: #4a5563;
+    --bs-btn-active-border-color: #56616f;
+}
+
+/* PluginDialog only follows the system setting, so it is told about the toggle here */
+html.dark [data-dialog-panel],
+[data-bs-theme="dark"] [data-dialog-panel] {
+    background: #1e2939;
+    color: #f3f4f6;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .55), 0 4px 12px rgba(0, 0, 0, .3);
+}
+
+html.dark [data-dialog-description],
+[data-bs-theme="dark"] [data-dialog-description] {
+    color: #9ca3af;
+}
+
+[data-bs-theme="light"] [data-dialog-panel] {
+    background: #fff;
+    color: #212529;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .25), 0 4px 12px rgba(0, 0, 0, .12);
+}
+
+[data-bs-theme="light"] [data-dialog-description] {
+    color: #6b7280;
+}

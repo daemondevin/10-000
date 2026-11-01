@@ -1,4 +1,4 @@
-// Lobby page: create a game, browse open games, read the rules.
+// Lobby page: create a game, join one by its code, browse open games, read the rules.
 (function ($) {
     "use strict";
 
@@ -6,34 +6,98 @@
     const $newBtn = $(".new-game-btn");
     const $openGames = $("#openGames");
     const $gameList = $("#openGamesList");
+    const $joinForm = $("#joinCode");
+    const $codeInput = $("#gameCode");
+    const $offline = $("#offlineNote");
 
-    $newBtn.on("click", async () => {
+    $newBtn.on("click", () => newGame());
+
+    async function newGame() {
         if ($newBtn.prop("disabled")) return;
         $newBtn.prop("disabled", true);
         const overlay = App.loader("Setting up a table…");
         if (overlay) overlay.show();
         try {
-            const resp = await fetch("/api/newgame");
+            const resp = await fetch(App.api("/api/newgame"));
             if (!resp.ok) throw new Error(`server answered ${resp.status}`);
             const data = await resp.json();
-            window.location.href = "/" + encodeURIComponent(data.Name);
+            window.location.href = App.roomUrl(data.Name);
         } catch (err) {
             console.error(err);
             if (overlay) overlay.hide();
             $newBtn.prop("disabled", false);
             App.toast("Could not create a game", "Is the server running?", "danger");
         }
+    }
+
+    // A game code is five letters. An invite link works too, its last part is the code.
+    function codeFrom(text) {
+        const value = String(text || "").trim();
+        const fromLink = value.match(/\/([a-z]{5})\/?(?:[?#].*)?$/i);
+        const code = fromLink ? fromLink[1] : value;
+        return /^[a-z]{5}$/i.test(code) ? code.toLowerCase() : null;
+    }
+
+    $joinForm.on("submit", (e) => {
+        e.preventDefault();
+        const code = codeFrom($codeInput.val());
+        if (!code) {
+            $codeInput.addClass("is-invalid").trigger("focus");
+            return;
+        }
+        // When there is no such game the website sends us back here with ?missing=, the apps
+        // say so on the game page
+        window.location.href = App.roomUrl(code);
+    });
+
+    $codeInput.on("input", () => $codeInput.removeClass("is-invalid"));
+
+    // Whether the last call to the server got through. navigator.onLine alone is not enough, it
+    // stays true on a Wi-Fi network with no internet.
+    let reachable = true;
+
+    // Online games need the server, the 3D game does not. No connection at all and a server
+    // that does not answer get different notices: the second is not something the player can fix.
+    function showConnection() {
+        const connected = App.online();
+        const online = connected && reachable;
+        $offline.prop("hidden", online);
+        $offline.find('[data-when="offline"]').prop("hidden", connected);
+        $offline.find('[data-when="unreachable"]').prop("hidden", !connected);
+        $newBtn.prop("disabled", !online);
+        $joinForm.find("input, button").prop("disabled", !online);
+        if (!online) $openGames.prop("hidden", true);
+    }
+    $(window).on("online offline", () => {
+        showConnection();
+        refreshGames();
     });
 
     // Games with players, waiting or in progress
     async function refreshGames() {
+        if (!App.online()) {
+            showConnection();
+            return;
+        }
+        let rooms;
         try {
-            const resp = await fetch("/api/getrooms");
-            const { rooms } = await resp.json();
+            const resp = await fetch(App.api("/api/getrooms"));
+            ({ rooms } = await resp.json());
+            reachable = true;
+        } catch (err) {
+            // No usable answer: no connection, the server is down or asleep, or (for the apps)
+            // the server does not allow the app's origin, which browsers report the same way
+            reachable = false;
+            console.warn("The game server did not answer:", App.api("/api/getrooms"), err);
+            showConnection();
+            return;
+        }
+        showConnection();
+        try {
             const open = rooms.filter((r) => r.players > 0);
             $gameList.empty();
             open.forEach((r) => {
-                const $item = $('<a class="list-group-item list-group-item-action"></a>').attr("href", "/" + encodeURIComponent(r.name));
+                const $item = $('<a class="list-group-item list-group-item-action"></a>').attr("href", App.roomUrl(r.name));
                 const $text = $('<div class="flex-grow-1"></div>')
                     .append($('<div class="fw-bold"></div>').text(r.host ? `${r.host}'s game` : r.name))
                     .append($('<small class="text-body-secondary"></small>').text(r.name));
@@ -56,6 +120,14 @@
         window.history.replaceState(null, "", "/");
     }
 
+    // The "New online game" shortcut on the installed app's icon
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") === "1") {
+        window.history.replaceState(null, "", "/");
+        if (App.online()) newGame();
+    }
+
+    showConnection();
     refreshGames();
     setInterval(refreshGames, REFRESH_MS);
 })(jQuery);

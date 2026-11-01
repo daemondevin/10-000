@@ -4,13 +4,15 @@
     "use strict";
 
     const { scoreSelection } = window.FarkleScoring;
-    const room = window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
+    // From /abcde on the website, from game.html?room=abcde in the apps
+    const room = App.currentRoom();
     const TOKEN_KEY = `farkle:${room}:token`;
     const NAME_KEY = "farkle:name";
     // Each player picks the flat dice or the 3D table for themselves, remembered per browser
     const VIEW_KEY = "farkle:view";
 
-    const socket = io();
+    // The website talks to the server that sent it, the apps to the address in config.js
+    const socket = App.server ? io(App.server) : io();
 
     let state = null;
     let me = null;
@@ -616,7 +618,15 @@
     // Invite
 
     $("#copyInvite").on("click", async () => {
-        const link = window.location.origin + "/" + room;
+        // Always the website's address, so the link works for friends without the app
+        const link = App.publicUrl("/" + room);
+        // Phones, tablets and the apps get the share sheet, with the code for typing into the app
+        const shared = await App.share({
+            title: "10,000 with Friends",
+            text: `Join my game of 10,000! Game code: ${room}`,
+            url: link
+        });
+        if (shared) return;
         try {
             await navigator.clipboard.writeText(link);
         } catch (e) {
@@ -627,6 +637,6 @@
             document.execCommand("copy");
             document.body.removeChild(ta);
         }
-        App.toast("Invite link copied", "Send it to a friend so they can join this game.", "success");
+        App.toast("Invite link copied", `Send it to a friend, or give them the game code ${room}.`, "success");
     });
 })(jQuery);

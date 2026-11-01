@@ -1,0 +1,12 @@
+{
+    "appId": "com.daemondevin.tenthousand",
+    "appName": "10,000",
+    "webDir": "www",
+    "backgroundColor": "#e9ecef",
+    "plugins": {
+        "SystemBars": {
+            "insetsHandling": "css",
+            "initialViewportFitValueHint": "cover"
+        }
+    }
+}

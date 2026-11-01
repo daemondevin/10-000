@@ -3,6 +3,12 @@
    Bootstrap 5.3 provides the layout and components, Themestrap plugins inject their own styles. */
 
 :root {
+    /* Room for the status bar, notch and home indicator when the page fills the screen
+       (viewport-fit=cover). iOS gives env(); Capacitor on Android also sets --safe-area-inset-*. */
+    --app-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+    --app-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+    --app-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+    --app-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
     --app-accent: #2185d0;
     --app-accent-dark: #1a69a4;
     --app-panel: rgba(0, 0, 0, .66);
@@ -50,7 +56,17 @@ body {
 .app-shell {
     max-width: 46rem;
     margin: 0 auto;
-    padding: 1.5rem 1rem 3rem;
+    padding:
+        calc(1.5rem + var(--app-safe-top))
+        calc(1rem + var(--app-safe-right))
+        calc(3rem + var(--app-safe-bottom))
+        calc(1rem + var(--app-safe-left));
+}
+
+/* PluginAlert notifications stay below the status bar (body raises this above the plugin's own rule) */
+body .alert-toast-stack {
+    top: calc(1.25rem + var(--app-safe-top));
+    right: calc(1.25rem + var(--app-safe-right));
 }
 
 .app-card {
@@ -388,8 +404,24 @@ body {
     margin: 0;
 }
 
+/* The scoring table. PluginMarkdown lets text break between any two letters (word-break:
+   break-word); in table cells that lets the browser squeeze a column down to one letter. Cells
+   here only break between words, and on phones the dice wrap onto a second line instead. */
 .rules-md table { font-size: .95rem; }
-.rules-md td:last-child { font-size: 1.35rem; line-height: 1; letter-spacing: .05em; white-space: nowrap; }
+.rules-md th,
+.rules-md td { word-break: normal; overflow-wrap: normal; }
+.rules-md td:last-child { font-size: 1.35rem; line-height: 1.35; letter-spacing: .05em; }
+
+@media (min-width: 576px) {
+    .rules-md td:last-child { white-space: nowrap; }
+}
+
+@media (max-width: 575.98px) {
+    .rules-md table { font-size: .875rem; }
+    .rules-md th,
+    .rules-md td { padding: .45em .55em; }
+    .rules-md td:last-child { font-size: 1.15rem; }
+}
 
 /* Standalone rules page */
 .rules-page .card-body h2:first-child { margin-top: 0; }
@@ -412,8 +444,8 @@ body {
 
 .single-player #game-panel {
     position: fixed;
-    right: 1rem;
-    bottom: 1rem;
+    right: calc(1rem + var(--app-safe-right));
+    bottom: calc(1rem + var(--app-safe-bottom));
     width: min(48rem, calc(100vw - 2rem));
     max-height: 46vh;
     overflow-y: auto;
@@ -449,8 +481,8 @@ body {
 
 @media (max-width: 700px) {
     .single-player #game-panel {
-        right: .5rem;
-        bottom: .5rem;
+        right: calc(.5rem + var(--app-safe-right));
+        bottom: calc(.5rem + var(--app-safe-bottom));
         width: calc(100vw - 1rem);
         max-height: 52vh;
         padding: .6rem;

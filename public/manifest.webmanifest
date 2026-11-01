@@ -1,0 +1,39 @@
+{
+    "id": "/",
+    "name": "10,000 with Friends",
+    "short_name": "10,000",
+    "description": "The dice game 10,000 (Farkle). Play online with friends, or alone and pass and play in 3D.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#e9ecef",
+    "theme_color": "#2185d0",
+    "categories": ["games", "entertainment"],
+    "icons": [
+        { "src": "/img/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/img/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "/img/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+        { "src": "/img/icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    ],
+    "shortcuts": [
+        {
+            "name": "New online game",
+            "short_name": "New game",
+            "url": "/?new=1",
+            "icons": [{ "src": "/img/icons/icon-192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "Play in 3D",
+            "short_name": "3D",
+            "url": "/farkle.html",
+            "icons": [{ "src": "/img/icons/icon-192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "Rules and scoring",
+            "short_name": "Rules",
+            "url": "/rules",
+            "icons": [{ "src": "/img/icons/icon-192.png", "sizes": "192x192" }]
+        }
+    ]
+}
