@@ -14,7 +14,7 @@
 //   - writes scripts/config.js with the game servers' addresses
 import { mkdirSync, copyFileSync, readdirSync, rmSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
-import { fileFor, PRECACHE_FIXED } from "../pwa";
+import { fileFor, PRECACHE_FIXED } from "../pwa.js";
 
 const ROOT = join(__dirname, "..");
 const PUBLIC = join(ROOT, "public");

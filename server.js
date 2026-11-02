@@ -3,8 +3,8 @@ import { randomInt } from "crypto";
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import Game from "./game";
-import { mountPwa } from "./pwa";
+import Game from "./game.js";
+import { mountPwa } from "./pwa.js";
 
 const port = process.env.PORT || 3030;
 const PUBLIC_DIR = join(__dirname, "public");
