@@ -1,13 +1,13 @@
-const path = require("path");
-const crypto = require("crypto");
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const Game = require("./game");
-const { mountPwa } = require("./pwa");
+import { join } from "path";
+import { randomInt } from "crypto";
+import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import Game from "./game";
+import { mountPwa } from "./pwa";
 
 const port = process.env.PORT || 3030;
-const PUBLIC_DIR = path.join(__dirname, "public");
+const PUBLIC_DIR = join(__dirname, "public");
 // How long a farkle stays on screen once the dice have landed
 const FARKLE_PAUSE_MS = Number(process.env.FARKLE_PAUSE_MS) || 3200;
 // The longest wait for every player's dice to land after a farkle. The 3D table stops a throw
@@ -28,7 +28,7 @@ const APP_ORIGINS = (process.env.ALLOWED_ORIGINS || "capacitor://localhost,https
   .filter(Boolean);
 
 const app = express();
-const server = http.createServer(app);
+const server = createServer(app);
 const io = new Server(server, { cors: { origin: APP_ORIGINS } });
 
 // Same list for the lobby's /api calls. The website itself needs none of this.
@@ -48,7 +48,7 @@ function newGameName() {
   const letters = "abcdefghijklmnopqrstuvwxyz";
   let name;
   do {
-    name = Array.from({ length: 5 }, () => letters[crypto.randomInt(0, letters.length)]).join("");
+    name = Array.from({ length: 5 }, () => letters[randomInt(0, letters.length)]).join("");
   } while (games.has(name));
   return name;
 }
@@ -110,11 +110,11 @@ function removeGameIfEmpty(game) {
 // Pages and API
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "lobby.html"));
+  res.sendFile(join(PUBLIC_DIR, "lobby.html"));
 });
 
 app.get("/rules", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "rules.html"));
+  res.sendFile(join(PUBLIC_DIR, "rules.html"));
 });
 
 app.get("/api/newgame", (req, res) => {
@@ -138,7 +138,7 @@ app.use(express.static(PUBLIC_DIR));
 app.get("/:room", (req, res) => {
   const room = req.params.room.toLowerCase();
   if (ROOM_NAME.test(room) && games.has(room)) {
-    res.sendFile(path.join(PUBLIC_DIR, "game.html"));
+    res.sendFile(join(PUBLIC_DIR, "game.html"));
   } else {
     res.redirect(`/?missing=${encodeURIComponent(req.params.room)}`);
   }
@@ -334,4 +334,4 @@ server.listen(port, () => {
   console.log("listening on port: " + port);
 });
 
-module.exports = { app, server, io, games };
+export default { app, server, io, games };

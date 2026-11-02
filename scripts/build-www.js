@@ -12,15 +12,15 @@
 //   - copies the libraries and fonts the pages use from node_modules, the same files the
 //     website serves under /vendor/, plus the socket.io client and Capacitor's runtime
 //   - writes scripts/config.js with the game servers' addresses
-const fs = require("fs");
-const path = require("path");
-const { fileFor, PRECACHE_FIXED } = require("../pwa");
+import { mkdirSync, copyFileSync, readdirSync, rmSync, readFileSync, writeFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileFor, PRECACHE_FIXED } from "../pwa";
 
-const ROOT = path.join(__dirname, "..");
-const PUBLIC = path.join(ROOT, "public");
-const OUT = path.join(ROOT, "www");
+const ROOT = join(__dirname, "..");
+const PUBLIC = join(ROOT, "public");
+const OUT = join(ROOT, "www");
 // Every server here must run this game, with the same version as the app
-const DEFAULT_SERVERS = ["https://farkle-eqec.onrender.com", "https://farkle.synteq.app"];
+const DEFAULT_SERVERS = ["https://farkle.synteq.app", "https://farkle-eqec.onrender.com", "https://farkle-game.abasthan.app", "https://xjei440re67m-production-7u61absb.us-central1.suga.run"];
 const SERVERS = (process.env.FARKLE_SERVERS || process.env.FARKLE_SERVER || DEFAULT_SERVERS.join(","))
   .split(",")
   .map((s) => s.trim().replace(/\/+$/, ""))
@@ -32,14 +32,14 @@ const SKIP = new Set(["sw.js", "manifest.webmanifest"]);
 const PAGES = { "lobby.html": "index.html", "game.html": "game.html", "rules.html": "rules.html", "farkle.html": "farkle.html" };
 
 function copy(from, to) {
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(from, to);
+  mkdirSync(dirname(to), { recursive: true });
+  copyFileSync(from, to);
 }
 
 function copyTree(from, to) {
-  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
-    const src = path.join(from, entry.name);
-    const dest = path.join(to, entry.name);
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    const src = join(from, entry.name);
+    const dest = join(to, entry.name);
     if (entry.isDirectory()) copyTree(src, dest);
     else copy(src, dest);
   }
@@ -57,21 +57,21 @@ function adaptPage(html) {
 }
 
 function build() {
-  fs.rmSync(OUT, { recursive: true, force: true });
-  fs.mkdirSync(OUT, { recursive: true });
+  rmSync(OUT, { recursive: true, force: true });
+  mkdirSync(OUT, { recursive: true });
 
   // public/, pages renamed and adapted
-  for (const entry of fs.readdirSync(PUBLIC, { withFileTypes: true })) {
+  for (const entry of readdirSync(PUBLIC, { withFileTypes: true })) {
     if (SKIP.has(entry.name)) continue;
-    const src = path.join(PUBLIC, entry.name);
+    const src = join(PUBLIC, entry.name);
     if (entry.isDirectory()) {
-      copyTree(src, path.join(OUT, entry.name));
+      copyTree(src, join(OUT, entry.name));
     } else if (PAGES[entry.name]) {
-      const html = adaptPage(fs.readFileSync(src, "utf8"));
+      const html = adaptPage(readFileSync(src, "utf8"));
       if (!html.includes("/vendor/capacitor/capacitor.js")) throw new Error(`${entry.name} has no config.js script tag to put Capacitor before`);
-      fs.writeFileSync(path.join(OUT, PAGES[entry.name]), html);
+      writeFileSync(join(OUT, PAGES[entry.name]), html);
     } else {
-      copy(src, path.join(OUT, entry.name));
+      copy(src, join(OUT, entry.name));
     }
   }
 
@@ -79,25 +79,25 @@ function build() {
   let vendorFiles = 0;
   for (const url of PRECACHE_FIXED) {
     if (!url.startsWith("/vendor/") || url.startsWith("/vendor/themestrap/")) continue;
-    copy(fileFor(PUBLIC, url), path.join(OUT, url));
+    copy(fileFor(PUBLIC, url), join(OUT, url));
     vendorFiles++;
   }
   // Bootstrap Icons' CSS also names a .woff fallback next to the .woff2
-  copy(fileFor(PUBLIC, "/vendor/bootstrap-icons/fonts/bootstrap-icons.woff"), path.join(OUT, "vendor/bootstrap-icons/fonts/bootstrap-icons.woff"));
+  copy(fileFor(PUBLIC, "/vendor/bootstrap-icons/fonts/bootstrap-icons.woff"), join(OUT, "vendor/bootstrap-icons/fonts/bootstrap-icons.woff"));
 
   // The socket.io client the website gets from the server at /socket.io/socket.io.js
-  const socketClient = path.join(path.dirname(require.resolve("socket.io")), "..", "client-dist", "socket.io.min.js");
-  copy(socketClient, path.join(OUT, "socket.io", "socket.io.js"));
+  const socketClient = join(dirname(require.resolve("socket.io")), "..", "client-dist", "socket.io.min.js");
+  copy(socketClient, join(OUT, "socket.io", "socket.io.js"));
 
   // Capacitor's runtime, for plugins such as Share
-  copy(path.join(ROOT, "node_modules", "@capacitor", "core", "dist", "capacitor.js"), path.join(OUT, "vendor", "capacitor", "capacitor.js"));
+  copy(join(ROOT, "node_modules", "@capacitor", "core", "dist", "capacitor.js"), join(OUT, "vendor", "capacitor", "capacitor.js"));
 
   // Where the game servers are
   for (const server of SERVERS) {
     if (!/^https?:\/\/[^/]+$/.test(server)) throw new Error(`"${server}" is not a server address such as https://my.host`);
   }
-  fs.writeFileSync(
-    path.join(OUT, "scripts", "config.js"),
+  writeFileSync(
+    join(OUT, "scripts", "config.js"),
     "// Written by scripts/build-www.js, the game servers the app may use, in order of preference\n" +
       `window.FARKLE_SERVERS = ${JSON.stringify(SERVERS, null, 4)};\n`,
   );

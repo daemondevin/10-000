@@ -3,12 +3,12 @@
 //   - the service worker, built from public/sw.js with the list of files to keep offline and
 //     a version taken from those files' contents, so each deploy that changes one of them
 //     updates installed copies of the game
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
-const express = require("express");
+import { readdirSync, existsSync, readFileSync } from "fs";
+import { join } from "path";
+import { createHash } from "crypto";
+import express, { static as serveStatic } from "express";
 
-const MODULES = path.join(__dirname, "node_modules");
+const MODULES = join(__dirname, "node_modules");
 
 // URL prefix -> folder inside node_modules. Versions are pinned in package.json.
 const VENDOR = {
@@ -72,38 +72,38 @@ const PRECACHE_FIXED = [
 
 // The file on disk behind a URL, or null
 function fileFor(publicDir, url) {
-  if (PAGES[url]) return path.join(publicDir, PAGES[url]);
+  if (PAGES[url]) return join(publicDir, PAGES[url]);
   for (const [prefix, folder] of Object.entries(VENDOR)) {
-    if (url.startsWith(prefix + "/")) return path.join(MODULES, folder, url.slice(prefix.length + 1));
+    if (url.startsWith(prefix + "/")) return join(MODULES, folder, url.slice(prefix.length + 1));
   }
-  return path.join(publicDir, url.replace(/^\/+/, ""));
+  return join(publicDir, url.replace(/^\/+/, ""));
 }
 
 // Every Themestrap file the pages load
 function themestrapFiles(publicDir) {
-  const base = path.join(publicDir, "vendor", "themestrap", "js");
+  const base = join(publicDir, "vendor", "themestrap", "js");
   const urls = [];
   const walk = (dir, url) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) walk(path.join(dir, entry.name), `${url}/${entry.name}`);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(join(dir, entry.name), `${url}/${entry.name}`);
       else if (entry.name.endsWith(".js")) urls.push(`${url}/${entry.name}`);
     }
   };
-  if (fs.existsSync(base)) walk(base, "/vendor/themestrap/js");
+  if (existsSync(base)) walk(base, "/vendor/themestrap/js");
   return urls.sort();
 }
 
 function buildServiceWorker(publicDir) {
   const precache = [...PRECACHE_FIXED, ...themestrapFiles(publicDir)];
-  const hash = crypto.createHash("sha256");
+  const hash = createHash("sha256");
   const missing = [];
   for (const url of precache) {
     const file = fileFor(publicDir, url);
-    if (file && fs.existsSync(file)) hash.update(url).update(fs.readFileSync(file));
+    if (file && existsSync(file)) hash.update(url).update(readFileSync(file));
     else missing.push(url);
   }
   if (missing.length) console.warn("service worker: files to cache are missing:", missing.join(", "));
-  const template = fs.readFileSync(path.join(publicDir, "sw.js"), "utf8");
+  const template = readFileSync(join(publicDir, "sw.js"), "utf8");
   hash.update(template);
   const version = hash.digest("hex").slice(0, 12);
   const available = precache.filter((url) => !missing.includes(url));
@@ -116,7 +116,7 @@ function buildServiceWorker(publicDir) {
 function mountPwa(app, { publicDir }) {
   for (const [prefix, folder] of Object.entries(VENDOR)) {
     // The versions are pinned, so browsers may keep these for a long time
-    app.use(prefix, express.static(path.join(MODULES, folder), { maxAge: "30d", fallthrough: false }));
+    app.use(prefix, serveStatic(join(MODULES, folder), { maxAge: "30d", fallthrough: false }));
   }
 
   // Built once per server start. In development, restart the server after changing a cached file.
@@ -129,4 +129,4 @@ function mountPwa(app, { publicDir }) {
   });
 }
 
-module.exports = { mountPwa, buildServiceWorker, fileFor, PRECACHE_FIXED, VENDOR };
+export default { mountPwa, buildServiceWorker, fileFor, PRECACHE_FIXED, VENDOR };

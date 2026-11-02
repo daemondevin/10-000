@@ -1,5 +1,5 @@
-const crypto = require("crypto");
-const { scoreSelection, hasScoringDice, isSixOfAKind } = require("./public/scripts/scoring.js");
+import { randomInt, randomBytes } from "crypto";
+import { scoreSelection, hasScoringDice, isSixOfAKind } from "./public/scripts/scoring.js";
 
 const DICE_COUNT = 6;
 // Reads a whole number setting from the environment, used for quick test games
@@ -17,7 +17,7 @@ const MAX_PLAYERS = 8;
 const MAX_NAME_LENGTH = 20;
 
 function rollDie() {
-  return crypto.randomInt(1, 7);
+  return randomInt(1, 7);
 }
 
 function cleanName(raw) {
@@ -93,9 +93,9 @@ class Game {
     }
 
     const player = {
-      id: crypto.randomBytes(4).toString("hex"),
+      id: randomBytes(4).toString("hex"),
       // Secret the browser keeps so it can take its seat back after a reload or dropped connection
-      token: crypto.randomBytes(16).toString("hex"),
+      token: randomBytes(16).toString("hex"),
       socketId,
       connected: true,
       name,
@@ -179,7 +179,7 @@ class Game {
     });
     this.winner = null;
     this.finalRound = null;
-    this.turnIndex = crypto.randomInt(0, this.players.length);
+    this.turnIndex = randomInt(0, this.players.length);
     this.beginTurn();
     return { ok: true };
   }
@@ -422,4 +422,4 @@ Game.ENTRY_SCORE = ENTRY_SCORE;
 Game.MIN_BANK = MIN_BANK;
 Game.MAX_PLAYERS = MAX_PLAYERS;
 
-module.exports = Game;
+export default Game;
