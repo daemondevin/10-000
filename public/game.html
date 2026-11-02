@@ -43,6 +43,7 @@
                 </button>
                 <button type="button" id="toggleChat" class="btn btn-primary btn-sm" data-drawer-open="chat-drawer" disabled data-plugin-tooltip="Talk with the other players.">
                     <i class="bi bi-chat-dots-fill me-1" aria-hidden="true"></i> Chat <span id="chatUnread" class="badge text-bg-danger ms-1" hidden>0</span>
+                    <span id="chatTypingHint" class="typing-dots ms-1" hidden><i></i><i></i><i></i></span>
                 </button>
                 <button type="button" id="toggle3d" class="btn btn-outline-secondary btn-sm ms-auto" aria-pressed="false" data-plugin-tooltip="Throw the dice on the 3D table.">
                     <i class="bi bi-badge-3d" aria-hidden="true"></i><span class="visually-hidden">3D dice</span>
@@ -146,7 +147,8 @@
             </div>
             <div id="chatlog" class="chat-log" data-plugin-scroll-shadow data-plugin-scrollbar
                data-plugin-options='{"theme": "inset-3", "darkModeTheme": "inset-3-dark", "autoHideScrollbar": true, "scrollInertia": 650}' aria-live="polite"></div>
-            <form id="chat-form" class="input-group mt-2" autocomplete="off">
+            <div id="chatTyping" class="chat-typing" aria-live="polite"><span class="typing-dots" hidden><i></i><i></i><i></i></span><span class="chat-typing-text"></span></div>
+            <form id="chat-form" class="input-group" autocomplete="off">
                 <input type="text" id="chatmessage" class="form-control" placeholder="Write a message…" maxlength="500" aria-label="Message">
                 <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill me-1" aria-hidden="true"></i> Send</button>
             </form>

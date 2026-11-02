@@ -18,8 +18,12 @@
     let me = null;
     let lastSeq = 0;
     let animating = false;
+    // The turn's points shown while the dice tumble, so a farkle only wipes them once it lands
+    let heldTurnScore = null;
     let joining = false;
     let unread = 0;
+    // Other players writing a chat message: player id -> { name, timer }
+    const typing = new Map();
     const playerRows = new Map();
     // Dice the player whose turn it is has picked, as told by the server
     let remote = { turnId: 0, indexes: [] };
@@ -215,7 +219,14 @@
 
         if (!firstState && isNewEvent && (event.type === "roll" || event.type === "farkle" || event.type === "sixkind")) {
             // The result of a throw is only announced once the dice have landed
-            throwDice(prev, next, event.thrown || []).then(() => announce(event));
+            heldTurnScore = event.type === "farkle" ? event.lost || 0 : next.turnScore;
+            const turnId = next.turnId;
+            throwDice(prev, next, event.thrown || []).then(() => {
+                announce(event);
+                // The server waits for every player's dice to land before it starts the pause
+                // that leaves the farkle on screen
+                if (event.type === "farkle") socket.emit("landed", { turnId });
+            });
             render();
             return;
         }
@@ -242,6 +253,7 @@
         thrower.setState(next.dice.map((d, i) => (thrown.includes(i) ? { value: current[i], held: false } : d)));
         return thrower.roll(thrown, thrown.map((i) => next.dice[i].value)).then(() => {
             animating = false;
+            heldTurnScore = null;
             board.setState(state.dice);
             render();
         });
@@ -249,6 +261,15 @@
 
     socket.on("msg", (msg) => {
         addChat(msg.system ? null : msg.sender, msg.msg, { system: msg.system });
+        if (msg.system) return;
+        // The message is in, so they are done typing it
+        if (msg.id) setTyping(msg.id, msg.sender, false);
+        notifyChat(msg.sender, msg.msg);
+    });
+
+    socket.on("typing", (data) => {
+        if (!data || !data.id || (me && data.id === me.id)) return;
+        setTyping(data.id, data.name, data.typing === true);
     });
 
     // The game over dialog comes from the "won" and "sixkind" events in announce(), so a winning
@@ -499,16 +520,19 @@
         $turnBox.prop("hidden", !show);
         if (!show) return;
         $turnWho.text(myTurn ? "Your turn" : `${turnPlayer.name}'s turn`);
-        const value = state.turnScore + (sel.valid ? sel.points : 0);
+        // A farkle only shows once the dice have landed
+        const farkled = state.phase === "farkled" && !animating;
+        const base = animating && heldTurnScore !== null ? heldTurnScore : state.turnScore;
+        const value = base + (sel.valid ? sel.points : 0);
         if (turnCounter.shown !== value) {
             turnCounter.shown = value;
             turnCounter.replay(value);
         }
         let note = "";
-        if (state.phase === "farkled") note = "Farkle!";
+        if (farkled) note = "Farkle!";
         else if (sel.valid) note = `+${App.number(sel.points)} picked`;
-        $turnPick.text(note).toggleClass("text-danger", state.phase === "farkled");
-        $turnBox.toggleClass("is-farkle", state.phase === "farkled");
+        $turnPick.text(note).toggleClass("text-danger", farkled);
+        $turnBox.toggleClass("is-farkle", farkled);
     }
 
     // One row per player, kept between renders so the score counter and progress bar can animate
@@ -531,6 +555,7 @@
             row.$you.prop("hidden", !(me && p.id === me.id));
             row.$host.prop("hidden", !p.host);
             row.$away.prop("hidden", p.connected);
+            row.$typing.prop("hidden", !typing.has(p.id));
             row.$board.prop("hidden", !(state.started && !p.entered));
             const fr = state.started ? state.finalRound : null;
             row.$lead.prop("hidden", !(fr && fr.leaderId === p.id));
@@ -551,13 +576,14 @@
         const $you = $('<span class="badge rounded-pill text-bg-light border">you</span>');
         const $host = $('<i class="bi bi-star-fill text-warning" title="Host" aria-label="Host"></i>');
         const $away = $('<i class="bi bi-wifi-off text-secondary" title="Disconnected" aria-label="Disconnected"></i>');
+        const $typing = $('<span class="player-typing" hidden><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span> typing</span>');
         const $board = $('<span class="badge rounded-pill text-bg-secondary" title="Needs one turn of ' + App.number(state.entryScore) + ' to get on the board">not on board</span>');
         const $lead = $('<span class="badge rounded-pill text-bg-warning" title="Highest score, the one to beat"><i class="bi bi-trophy-fill me-1" aria-hidden="true"></i>to beat</span>');
         const $last = $('<span class="badge rounded-pill text-bg-info" title="One last turn to beat the leader">last turn</span>');
         const $score = $('<span class="player-score"></span>').text(App.number(p.score));
         const $progress = $("<div></div>");
 
-        $line.append('<span class="turn-dot" aria-hidden="true"></span>', $name, $you, $host, $away, $board, $lead, $last, $score);
+        $line.append('<span class="turn-dot" aria-hidden="true"></span>', $name, $you, $host, $away, $typing, $board, $lead, $last, $score);
         $el.append($line, $progress);
         $playerList.append($el);
 
@@ -570,7 +596,7 @@
         })[0];
         $progress.attr("aria-label", `${p.name}'s progress to ${App.number(state.winningScore)}`);
 
-        return { $el, $name, $you, $host, $away, $board, $lead, $last, counter, progress, score: p.score };
+        return { $el, $name, $you, $host, $away, $typing, $board, $lead, $last, counter, progress, score: p.score };
     }
 
     // Chat
@@ -599,11 +625,86 @@
         }
     }
 
+    // A new message from someone else pops up for everyone not reading the chat already
+    function notifyChat(sender, text) {
+        const drawer = App.drawer("chat-drawer");
+        if (drawer && drawer.isOpen) return;
+        const short = text.length > 160 ? text.slice(0, 157).trimEnd() + "…" : text;
+        App.toast(sender, short, "info", {
+            delay: 6000,
+            pauseOnHover: true,
+            actions: [{ label: "Reply", key: "reply", variant: "primary" }],
+            onAction(key) {
+                if (key === "reply" && drawer) drawer.open();
+                this.dismiss();
+            }
+        });
+    }
+
+    // Who is typing. A note expires on its own when no update comes, in case the "stopped"
+    // never arrives.
+    const TYPING_EXPIRES_MS = 6000;
+
+    function setTyping(id, name, on) {
+        const known = typing.get(id);
+        if (known) clearTimeout(known.timer);
+        if (on) {
+            typing.set(id, { name, timer: setTimeout(() => setTyping(id, name, false), TYPING_EXPIRES_MS) });
+        } else {
+            typing.delete(id);
+        }
+        renderTyping();
+    }
+
+    function renderTyping() {
+        const names = [...typing.values()].map((t) => t.name);
+        let text = "";
+        if (names.length === 1) text = `${names[0]} is typing…`;
+        else if (names.length === 2) text = `${names[0]} and ${names[1]} are typing…`;
+        else if (names.length > 2) text = `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are typing…`;
+        const $box = $("#chatTyping");
+        $box.find(".typing-dots").prop("hidden", !names.length);
+        $box.find(".chat-typing-text").text(text);
+        // On the Chat button only while the chat is closed
+        const drawer = App.drawer("chat-drawer");
+        $("#chatTypingHint").prop("hidden", !names.length || Boolean(drawer && drawer.isOpen));
+        playerRows.forEach((row, id) => row.$typing.prop("hidden", !typing.has(id)));
+    }
+
+    // Tells the others this player is typing: once when they start, again every few seconds
+    // while they keep going, and "stopped" when they send, clear the box, leave it or pause
+    const TYPING_REPEAT_MS = 2500;
+    const TYPING_PAUSE_MS = 4000;
+    let typingSentAt = 0;
+    let typingPause = null;
+
+    function stopTyping() {
+        clearTimeout(typingPause);
+        if (!typingSentAt) return;
+        typingSentAt = 0;
+        socket.emit("typing", false);
+    }
+
+    $("#chatmessage").on("input", function () {
+        if (!me) return;
+        if (!this.value.trim()) return stopTyping();
+        const now = Date.now();
+        if (now - typingSentAt > TYPING_REPEAT_MS) {
+            typingSentAt = now;
+            socket.emit("typing", true);
+        }
+        clearTimeout(typingPause);
+        typingPause = setTimeout(stopTyping, TYPING_PAUSE_MS);
+    }).on("blur", stopTyping);
+
     $("#chat-form").on("submit", (e) => {
         e.preventDefault();
         const $input = $("#chatmessage");
         const text = String($input.val() || "").trim();
         if (!text || !me) return;
+        // The others clear the note when the message arrives, no "stopped" needed
+        clearTimeout(typingPause);
+        typingSentAt = 0;
         socket.emit("msg", text);
         addChat("You", text, { mine: true });
         $input.val("");
@@ -612,8 +713,9 @@
     $("#chat-drawer").on("drawer:open", () => {
         unread = 0;
         $unread.prop("hidden", true);
+        renderTyping();
         setTimeout(() => $("#chatmessage").trigger("focus"), 50);
-    });
+    }).on("drawer:close", renderTyping);
 
     // Invite
 

@@ -8,7 +8,11 @@ const { mountPwa } = require("./pwa");
 
 const port = process.env.PORT || 3030;
 const PUBLIC_DIR = path.join(__dirname, "public");
-const FARKLE_PAUSE_MS = 3200;
+// How long a farkle stays on screen once the dice have landed
+const FARKLE_PAUSE_MS = Number(process.env.FARKLE_PAUSE_MS) || 3200;
+// The longest wait for every player's dice to land after a farkle. The 3D table stops a throw
+// after 8 seconds, so this only runs out for a page that never says its dice landed.
+const LANDING_WAIT_MS = Number(process.env.LANDING_WAIT_MS) || 9000;
 // How long a disconnected player keeps their seat
 const LEAVE_GRACE_MS = Number(process.env.LEAVE_GRACE_MS) || 60 * 1000;
 // Games nobody has joined are removed after this long
@@ -57,6 +61,42 @@ function announce(game, event) {
 
 function broadcastState(game) {
   io.to(game.name).emit("state", game.publicState());
+}
+
+// After a farkle each player's page tumbles the dice, the 3D table for longer than the flat
+// dice. The dice pass on FARKLE_PAUSE_MS after the last of them has landed, so everyone sees
+// the farkle for the same time.
+function waitForLanding(game) {
+  const turnId = game.turnId;
+  clearTimeout(game.farkleTimer);
+  game.landing = { turnId, waiting: new Set(game.players.filter((p) => p.connected).map((p) => p.id)) };
+  game.farkleTimer = setTimeout(() => {
+    if (game.landing && game.landing.turnId === turnId) startFarklePause(game, turnId);
+  }, LANDING_WAIT_MS);
+}
+
+// One player's dice have landed, or they left and will not say so
+function diceLanded(game, turnId, playerId) {
+  const landing = game.landing;
+  if (!landing || landing.turnId !== turnId) return;
+  landing.waiting.delete(playerId);
+  if (!landing.waiting.size) startFarklePause(game, turnId);
+}
+
+function startFarklePause(game, turnId) {
+  game.landing = null;
+  clearTimeout(game.farkleTimer);
+  game.farkleTimer = setTimeout(() => {
+    if (games.get(game.name) !== game || game.turnId !== turnId || game.phase !== "farkled") return;
+    // A farkle in the final round still uses up that player's last turn
+    if (game.finishTurn()) {
+      announce(game, { type: "won", player: game.winner.name, winner: game.winner });
+      io.to(game.name).emit("gamewon", game.winner);
+    } else {
+      announce(game, { type: "turn", player: game.currentPlayer().name });
+    }
+    broadcastState(game);
+  }, FARKLE_PAUSE_MS);
 }
 
 function removeGameIfEmpty(game) {
@@ -192,22 +232,15 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (result.farkle) {
-      // Leave the farkled dice on screen for a moment, then pass the dice on
-      const turnId = game.turnId;
-      clearTimeout(game.farkleTimer);
-      game.farkleTimer = setTimeout(() => {
-        if (games.get(game.name) !== game || game.turnId !== turnId || game.phase !== "farkled") return;
-        // A farkle in the final round still uses up that player's last turn
-        if (game.finishTurn()) {
-          announce(game, { type: "won", player: game.winner.name, winner: game.winner });
-          io.to(game.name).emit("gamewon", game.winner);
-        } else {
-          announce(game, { type: "turn", player: game.currentPlayer().name });
-        }
-        broadcastState(game);
-      }, FARKLE_PAUSE_MS);
-    }
+    // Leave the farkled dice on screen for a moment once they have landed, then pass them on
+    if (result.farkle) waitForLanding(game);
+  });
+
+  // The page has finished tumbling the dice of a farkle
+  on("landed", (data) => {
+    if (!game) return;
+    const player = game.findPlayer(socket.id);
+    if (player) diceLanded(game, Number(data && data.turnId), player.id);
   });
 
   // The current player picking or dropping a die. Everyone else is told straight away, without
@@ -246,7 +279,16 @@ io.on("connection", (socket) => {
     const player = game.findPlayer(socket.id);
     const msg = text.trim().slice(0, 500);
     if (!player || !msg) return;
-    socket.to(game.name).emit("msg", { sender: player.name, msg });
+    socket.to(game.name).emit("msg", { id: player.id, sender: player.name, msg });
+  });
+
+  // A player started or stopped writing a chat message. Pages repeat "typing" every few
+  // seconds while it lasts, so a lost "stopped" only leaves the note up for a moment.
+  on("typing", (typing) => {
+    if (!game) return;
+    const player = game.findPlayer(socket.id);
+    if (!player) return;
+    socket.to(game.name).emit("typing", { id: player.id, name: player.name, typing: typing === true });
   });
 
   // A dropped connection keeps the seat for a while so a reload or flaky network
@@ -259,6 +301,9 @@ io.on("connection", (socket) => {
 
     announce(current, { type: "away", player: player.name });
     broadcastState(current);
+    io.to(current.name).emit("typing", { id: player.id, name: player.name, typing: false });
+    // No need to wait for their dice to land
+    diceLanded(current, current.turnId, player.id);
 
     clearTimeout(player.leaveTimer);
     player.leaveTimer = setTimeout(() => {

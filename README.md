@@ -99,6 +99,8 @@ If a player's connection drops or they reload the page, they keep their seat for
 | `ENTRY_SCORE` | `1000` | Points needed in one turn for a player's first bank |
 | `MIN_BANK` | `400` | Smallest turn total a player can bank once on the board |
 | `LEAVE_GRACE_MS` | `60000` | How long a disconnected player keeps their seat |
+| `FARKLE_PAUSE_MS` | `3200` | How long a farkle stays on screen, counted from when the last player's dice land |
+| `LANDING_WAIT_MS` | `9000` | The longest the server waits for every player's dice to land after a farkle |
 | `ALLOWED_ORIGINS` | `capacitor://localhost,https://localhost` | Origins allowed to call the server from elsewhere, the Android and iOS apps |
 
 ## Project layout

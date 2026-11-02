@@ -222,7 +222,7 @@ body .alert-toast-stack {
     .app-shell { padding: calc(var(--app-safe-top))
         calc(.2rem + var(--app-safe-right))
         calc(3rem + var(--app-safe-bottom))
-        calc(.2rem + var(--app-safe-left)) };
+        calc(.2rem + var(--app-safe-left)); }
     .dice-board { grid-template-columns: 1fr; }
     .dice-board .ts-dice { --ts-dice-size: 2.9rem; }
     .board-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; min-width: 0; }
@@ -386,6 +386,54 @@ body .alert-toast-stack {
 .chat-line .chat-sender { font-weight: 700; }
 .chat-line.is-mine .chat-sender { color: var(--app-accent); }
 .chat-line.is-system { font-style: italic; opacity: .7; }
+
+/* Who else is writing a message: under the chat log, on the Chat button and in the player list */
+.chat-typing {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    min-height: 1.75rem;
+    padding: .2rem .25rem;
+    font-size: .875rem;
+    font-style: italic;
+    color: var(--bs-secondary-color);
+}
+
+.typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: .18em;
+    vertical-align: middle;
+}
+
+.typing-dots[hidden] { display: none; }
+
+.typing-dots i {
+    width: .38em;
+    height: .38em;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .35;
+    animation: app-typing 1.2s ease-in-out infinite;
+}
+
+.typing-dots i:nth-child(2) { animation-delay: .2s; }
+.typing-dots i:nth-child(3) { animation-delay: .4s; }
+
+@keyframes app-typing {
+    0%, 60%, 100% { opacity: .35; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-.2em); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .typing-dots i { animation: none; opacity: .8; }
+}
+
+.player-typing {
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--bs-secondary-color);
+}
 
 /* Drawers */
 .app-drawer [data-drawer-panel] {

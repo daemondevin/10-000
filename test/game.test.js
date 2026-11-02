@@ -8,12 +8,23 @@ process.env.PORT = "0";
 process.env.LEAVE_GRACE_MS = "400";
 // High enough that the random socket game never reaches it, the final round tests set scores directly
 process.env.WINNING_SCORE = "50000";
+// Short farkle pauses keep the socket tests quick
+process.env.FARKLE_PAUSE_MS = "300";
+process.env.LANDING_WAIT_MS = "1500";
 const Game = require("../game");
 
 // Makes every die the server throws show face until restore() is called
 function loadDice(face) {
   const real = crypto.randomInt;
   crypto.randomInt = (min, max) => (min === 1 && max === 7 ? face : real(min, max));
+  return () => (crypto.randomInt = real);
+}
+
+// Makes the server's dice come up as faces, in turn, until restore() is called
+function loadFaces(faces) {
+  const real = crypto.randomInt;
+  let next = 0;
+  crypto.randomInt = (min, max) => (min === 1 && max === 7 ? faces[next++ % faces.length] : real(min, max));
   return () => (crypto.randomInt = real);
 }
 
@@ -448,12 +459,20 @@ async function serverTests() {
   const clients = [];
   function client(room, token) {
     const socket = ioClient(base, { forceNew: true, transports: ["websocket"] });
-    const c = { socket, state: null, problems: [], msgs: [], me: null, events: [] };
-    socket.on("state", (s) => (c.state = s));
+    const c = { socket, state: null, problems: [], msgs: [], me: null, events: [], holdLanding: false, landedSeq: 0 };
+    socket.on("state", (s) => {
+      c.state = s;
+      // Says the dice of a farkle have landed, as the game page does once they stop tumbling
+      const e = s.lastEvent;
+      if (e && e.type === "farkle" && e.seq !== c.landedSeq && !c.holdLanding) {
+        c.landedSeq = e.seq;
+        socket.emit("landed", { turnId: s.turnId });
+      }
+    });
     socket.on("problem", (p) => c.problems.push(p));
     socket.on("msg", (m) => c.msgs.push(m));
     socket.on("joined", (j) => (c.me = j));
-    ["gamewon", "playerDisconect", "missing", "selection"].forEach((e) => socket.on(e, (d) => c.events.push([e, d])));
+    ["gamewon", "playerDisconect", "missing", "selection", "typing"].forEach((e) => socket.on(e, (d) => c.events.push([e, d])));
     socket.on("connect", () => socket.emit("watch", { room, token }));
     clients.push(c);
     return c;
@@ -546,6 +565,30 @@ async function serverTests() {
     await until(() => b.msgs.some((m) => m.msg === "hello table") && c.msgs.some((m) => m.msg === "hello table"));
     await wait(100);
     assert.ok(!a.msgs.some((m) => m.msg === "hello table"));
+    const got = b.msgs.find((m) => m.msg === "hello table");
+    assert.deepStrictEqual([got.id, got.sender], [a.me.id, a.me.name], "the message says who sent it");
+  });
+
+  await test("typing reaches the other players only", async () => {
+    const typingOf = (x, id) => x.events.filter(([e, d]) => e === "typing" && d.id === id).map(([, d]) => d.typing);
+    b.socket.emit("typing", true);
+    await until(() => typingOf(a, b.me.id).length && typingOf(c, b.me.id).length);
+    assert.deepStrictEqual([typingOf(a, b.me.id), typingOf(c, b.me.id)], [[true], [true]]);
+    assert.deepStrictEqual(a.events.find(([e, d]) => e === "typing" && d.id === b.me.id)[1].name, b.me.name);
+    b.socket.emit("typing", "yes please");
+    await until(() => typingOf(a, b.me.id).length === 2);
+    assert.strictEqual(typingOf(a, b.me.id)[1], false, "only true means typing");
+    await wait(100);
+    assert.ok(!typingOf(b, b.me.id).length, "not sent back to the typist");
+
+    // Someone watching without a seat cannot type into the game
+    const watcher = client(room);
+    await until(() => watcher.state);
+    const before = a.events.length;
+    watcher.socket.emit("typing", true);
+    await wait(150);
+    assert.strictEqual(a.events.length, before);
+    watcher.socket.disconnect();
   });
 
   await test("host starts and turns run in order with banked scores adding up", async () => {
@@ -689,6 +732,49 @@ async function serverTests() {
     game.beginTurn();
   });
 
+  await test("a farkle passes the dice on once every player's dice have landed", async () => {
+    const game = games.get(room);
+    const players = [a, b, c];
+    const farkle = async () => {
+      const turn = players.find((x) => x.me.id === a.state.turnPlayerId);
+      const seq = a.state.lastEvent.seq;
+      // 300 so far, keep the 1 for 100 more, then five dice with nothing that scores
+      midTurn(game, 300);
+      const restore = loadFaces([2, 3, 4, 6, 2]);
+      try {
+        turn.socket.emit("roll", { keep: [0] });
+        await until(() => players.every((x) => x.state.lastEvent.seq > seq));
+      } finally {
+        restore();
+      }
+      assert.deepStrictEqual([a.state.lastEvent.type, a.state.lastEvent.lost, a.state.phase], ["farkle", 400, "farkled"]);
+      return a.state.turnId;
+    };
+
+    players.forEach((x) => (x.holdLanding = true));
+    try {
+      // Two players' dice have landed, the third is still tumbling
+      let turnId = await farkle();
+      a.socket.emit("landed", { turnId });
+      b.socket.emit("landed", { turnId });
+      c.socket.emit("landed", { turnId: turnId - 1 });
+      await wait(900);
+      assert.strictEqual(a.state.turnId, turnId, "the dice wait for the last player");
+      const landed = Date.now();
+      c.socket.emit("landed", { turnId });
+      await until(() => a.state.turnId !== turnId && a.state.phase === "start");
+      assert.ok(Date.now() - landed >= 250, "the farkle stays on screen for the pause");
+
+      // A page that never says, an older one, holds the game up for LANDING_WAIT_MS at most
+      turnId = await farkle();
+      const thrown = Date.now();
+      await until(() => a.state.turnId !== turnId, 4000);
+      assert.ok(Date.now() - thrown >= 1500, "waited for the dice to land");
+    } finally {
+      players.forEach((x) => (x.holdLanding = false));
+    }
+  });
+
   await test("six of a kind over sockets wins on the spot", async () => {
     const turn = [a, b, c].find((x) => x.me.id === a.state.turnPlayerId);
     const seq = a.state.lastEvent.seq;
@@ -711,8 +797,11 @@ async function serverTests() {
   await test("a reload keeps the seat, a longer absence gives it up", async () => {
     const token = b.me.token;
     const id = b.me.id;
+    const seen = a.events.length;
     b.socket.disconnect();
     await until(() => a.state.players.find((p) => p.id === id).connected === false);
+    // A dropped player stops typing
+    await until(() => a.events.slice(seen).some(([e, d]) => e === "typing" && d.id === id && d.typing === false));
     const b2 = client(room, token);
     await until(() => b2.me && b2.me.id === id);
     await until(() => a.state.players.find((p) => p.id === id).connected === true);
