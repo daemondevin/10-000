@@ -1,4 +1,5 @@
-import { join } from "path";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { randomInt } from "crypto";
 import express from "express";
 import { createServer } from "http";
@@ -7,7 +8,7 @@ import Game from "./game.js";
 import { mountPwa } from "./pwa.js";
 
 const port = process.env.PORT || 3030;
-const PUBLIC_DIR = join(__dirname, "public");
+const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "public");
 // How long a farkle stays on screen once the dice have landed
 const FARKLE_PAUSE_MS = Number(process.env.FARKLE_PAUSE_MS) || 3200;
 // The longest wait for every player's dice to land after a farkle. The 3D table stops a throw

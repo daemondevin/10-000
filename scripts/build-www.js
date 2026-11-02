@@ -14,11 +14,14 @@
 //   - writes scripts/config.js with the game servers' addresses
 import { mkdirSync, copyFileSync, readdirSync, rmSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { createRequire } from "module";
 import { fileFor, PRECACHE_FIXED } from "../pwa.js";
 
-const ROOT = join(__dirname, "..");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = join(ROOT, "public");
 const OUT = join(ROOT, "www");
+const require = createRequire(import.meta.url);
 // Every server here must run this game, with the same version as the app
 const DEFAULT_SERVERS = ["https://farkle.synteq.app", "https://farkle-eqec.onrender.com", "https://farkle-game.abasthan.app", "https://xjei440re67m-production-7u61absb.us-central1.suga.run"];
 const SERVERS = (process.env.FARKLE_SERVERS || process.env.FARKLE_SERVER || DEFAULT_SERVERS.join(","))

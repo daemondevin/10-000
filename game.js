@@ -1,5 +1,7 @@
 import { randomInt, randomBytes } from "crypto";
-import { scoreSelection, hasScoringDice, isSixOfAKind } from "./public/scripts/scoring.js";
+import FarkleScoring from "./public/scripts/scoring.js";
+
+const { scoreSelection, hasScoringDice, isSixOfAKind } = FarkleScoring;
 
 const DICE_COUNT = 6;
 // Reads a whole number setting from the environment, used for quick test games

@@ -5,10 +5,11 @@
 //     updates installed copies of the game
 import { readdirSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { fileURLToPath } from "url";
 import { createHash } from "crypto";
 import express, { static as serveStatic } from "express";
 
-const MODULES = join(__dirname, "node_modules");
+const MODULES = join(fileURLToPath(new URL(".", import.meta.url)), "node_modules");
 
 // URL prefix -> folder inside node_modules. Versions are pinned in package.json.
 const VENDOR = {
@@ -129,4 +130,5 @@ function mountPwa(app, { publicDir }) {
   });
 }
 
+export { mountPwa, buildServiceWorker, fileFor, PRECACHE_FIXED, VENDOR };
 export default { mountPwa, buildServiceWorker, fileFor, PRECACHE_FIXED, VENDOR };
