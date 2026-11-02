@@ -219,6 +219,10 @@ body .alert-toast-stack {
 }
 
 @media (max-width: 575.98px) {
+    .app-shell { padding: calc(var(--app-safe-top))
+        calc(.2rem + var(--app-safe-right))
+        calc(3rem + var(--app-safe-bottom))
+        calc(.2rem + var(--app-safe-left)) };
     .dice-board { grid-template-columns: 1fr; }
     .dice-board .ts-dice { --ts-dice-size: 2.9rem; }
     .board-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; min-width: 0; }

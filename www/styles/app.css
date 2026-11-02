@@ -219,6 +219,10 @@ body .alert-toast-stack {
 }
 
 @media (max-width: 575.98px) {
+    .app-shell { padding: calc(var(--app-safe-top))
+        calc(.2rem + var(--app-safe-right))
+        calc(3rem + var(--app-safe-bottom))
+        calc(.2rem + var(--app-safe-left)) };
     .dice-board { grid-template-columns: 1fr; }
     .dice-board .ts-dice { --ts-dice-size: 2.9rem; }
     .board-buttons { flex-direction: row; flex-wrap: wrap; justify-content: center; min-width: 0; }
@@ -404,8 +408,24 @@ body .alert-toast-stack {
     margin: 0;
 }
 
+/* The scoring table. PluginMarkdown lets text break between any two letters (word-break:
+   break-word); in table cells that lets the browser squeeze a column down to one letter. Cells
+   here only break between words, and on phones the dice wrap onto a second line instead. */
 .rules-md table { font-size: .95rem; }
-.rules-md td:last-child { font-size: 1.35rem; line-height: 1; letter-spacing: .05em; white-space: nowrap; }
+.rules-md th,
+.rules-md td { word-break: normal; overflow-wrap: normal; }
+.rules-md td:last-child { font-size: 1.35rem; line-height: 1.35; letter-spacing: .05em; }
+
+@media (min-width: 576px) {
+    .rules-md td:last-child { white-space: nowrap; }
+}
+
+@media (max-width: 575.98px) {
+    .rules-md table { font-size: .875rem; }
+    .rules-md th,
+    .rules-md td { padding: .45em .55em; }
+    .rules-md td:last-child { font-size: 1.15rem; }
+}
 
 /* Standalone rules page */
 .rules-page .card-body h2:first-child { margin-top: 0; }

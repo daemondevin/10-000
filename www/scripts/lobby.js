@@ -56,10 +56,14 @@
     // stays true on a Wi-Fi network with no internet.
     let reachable = true;
 
-    // Online games need the server, the 3D game does not
+    // Online games need the server, the 3D game does not. No connection at all and a server
+    // that does not answer get different notices: the second is not something the player can fix.
     function showConnection() {
-        const online = App.online() && reachable;
+        const connected = App.online();
+        const online = connected && reachable;
         $offline.prop("hidden", online);
+        $offline.find('[data-when="offline"]').prop("hidden", connected);
+        $offline.find('[data-when="unreachable"]').prop("hidden", !connected);
         $newBtn.prop("disabled", !online);
         $joinForm.find("input, button").prop("disabled", !online);
         if (!online) $openGames.prop("hidden", true);
@@ -81,8 +85,10 @@
             ({ rooms } = await resp.json());
             reachable = true;
         } catch (err) {
-            // No answer at all: no connection, or the server is down
+            // No usable answer: no connection, the server is down or asleep, or (for the apps)
+            // the server does not allow the app's origin, which browsers report the same way
             reachable = false;
+            console.warn("The game server did not answer:", App.api("/api/getrooms"), err);
             showConnection();
             return;
         }
