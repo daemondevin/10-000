@@ -2,7 +2,9 @@
 
 The dice game 10,000 (also known as Farkle), playable online with friends or alone.
 
-[Live Demo](https://farkle-eqec.onrender.com)
+### Live Demos
+
+[![badge](https://shieldcn.dev/badge/Synteq-Demo-181a1a.svg?size=xs&font=geist&split=true&logo=data%3Aimage%2Fsvg%2Bxml%2C%3Csvg+xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27+viewBox%3D%270+0+24+24%27%3E%3Cpath+fill%3D%27%2523d65136%27+fill-rule%3D%27evenodd%27+d%3D%27m17.2+15.2-1-1.3h-5.4L18.6+24H24l-3.6-4.5+1.4-1.3q1-1+1-2.5V8.6q0-1.5-1.1-2.6l-5.1-5a4+4+0+0+0-2.5-1H8.6a4+4+0+0+0-2.5+1l-5+5Q.1+7+0+8.6v7.1q0+1.5+1+2.5l4.9+4.7q1+1+2.6+1.1h5.7c.4+0+1.3.1+1.6+0l-3.6-4.6-5.6-.2a2+2+0+0+1-2-2V6.7a2+2+0+0+1+2-2.1h9.5c1.1+0+2+1+2+2.1v9.7z%27%2F%3E%3C%2Fsvg%3E&logoColor=D65136&color=d65136&labelColor=181a1a&valueColor=c4c7c4&labelTextColor=c4c7c4)](https://farkle.synteq.app/) [![badge](https://shieldcn.dev/badge/Render-Demo-1c0037.svg?size=xs&font=geist&split=true&logo=data%3Aimage%2Fsvg%2Bxml%2C%3Csvg+xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27+viewBox%3D%270+0+24+24%27%3E%3Cpath+fill%3D%27%2523fff%27+d%3D%27M24+5.7v-.6l-.1-.1v-.3l-.1-.2v-.2l-.1-.1v-.1l-.1-.1v-.2l-.1-.1-.1-.2v-.1l-.1-.2v-.1l-.1-.1-.1-.1-.1-.2v-.1l-.2-.2-.1-.2h-.1A6+6+0+0+0+18+0l-1.5.2q-.5+0-.8.3l-.3.1a6+6+0+0+0-3.3+4.6q-.2+1.2-.8+2.4A8+8+0+0+1+.3+11q-.2-.1-.3.2V24h12v-9a3+3+0+0+1+3-3h3l1.5-.2q.5+0+.8-.3l.3-.1A6+6+0+0+0+24+6.6z%27+clip-path%3D%27url%28%2523clip0_682_25%29%27%2F%3E%3C%2Fsvg%3E&logoColor=ffffff&color=ffffff&labelColor=181a1a&valueColor=c4c7c4&labelTextColor=c4c7c4)](https://farkle.synteq.app/)
 
 ## Running it
 
@@ -71,13 +73,19 @@ In Android Studio press **Run** to try it on a phone or emulator, or **Build > G
 | File | Role |
 | --- | --- |
 | `capacitor.config.json` | App id (`com.daemondevin.tenthousand`), name and screen settings. The id is permanent once an app is published |
-| `scripts/build-www.js` | Builds `www/` from `public/` and `node_modules`: lobby as `index.html`, the libraries, the socket.io client, Capacitor's runtime and the server address |
+| `scripts/build-www.js` | Builds `www/` from `public/` and `node_modules`: lobby as `index.html`, the libraries, the socket.io client, Capacitor's runtime and the list of game servers |
 | `assets/` | Source images for `npm run app:assets` (icon layers and splash screens) |
 | `android/`, `ios/` | The native projects. Commit them once created, they hold your signing and store settings |
 
-The server address the apps use comes from `FARKLE_SERVER` when building, for example `FARKLE_SERVER=https://my.host npm run app:android`. The server accepts the apps' requests from `capacitor://localhost` (iOS) and `https://localhost` (Android); set `ALLOWED_ORIGINS` on the server to change that list. Invites from the apps always send the website's address, so friends without the app can join in a browser.
+The apps can use more than one game server, so a game can still be started when one is down or asleep. The list is `DEFAULT_SERVERS` in `scripts/build-www.js`, or `FARKLE_SERVERS` when building, for example `FARKLE_SERVERS=https://one.host,https://two.host npm run app:android`. Every listed server must run this game, at the same version as the app.
 
-Render's free plan puts the server to sleep when nobody plays, so the first game of the day can take most of a minute to start in the apps as well as on the website.
+- The lobby checks every server, lists the open games of all that answer, and starts new games on the one that worked last, or the next that answers
+- A game lives on the server that started it, the servers share nothing. Its page in the app names that server, join by code asks every server which one has the game, and invites point at that server's website
+- If a game's server stops answering for 45 seconds while the phone is online, the player is offered the lobby to start again on a server that works
+
+Each server accepts the apps' requests from `capacitor://localhost` (iOS) and `https://localhost` (Android); set `ALLOWED_ORIGINS` on the server to change that list. Invites from the apps always send the website's address, so friends without the app can join in a browser.
+
+Render's free plan puts the server to sleep when nobody plays, so the first game of the day can take most of a minute to start on the website. The apps use another listed server in the meantime.
 
 ## Playing online
 
@@ -111,7 +119,7 @@ If a player's connection drops or they reload the page, they keep their seat for
 | `pwa.js` | Serves the libraries and fonts from `node_modules` and builds the service worker |
 | `game.js` | Game rules and turn state, the server is the only source of truth |
 | `public/scripts/scoring.js` | Meld scoring, shared by the server, the online game and the 3D game |
-| `public/scripts/config.js` | The game server's address, empty on the website, set in the apps' copy |
+| `public/scripts/config.js` | The game servers' addresses, none on the website, listed in the apps' copy |
 | `public/scripts/app.js` | Shared page setup: drawers, tooltips, page loader, toasts, storage, server address and room links |
 | `public/scripts/main.js` | Online game page client |
 | `public/scripts/lobby.js` | Lobby page client |

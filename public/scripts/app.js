@@ -7,11 +7,73 @@
 
     const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     const ROOM = /^[a-z]{5}$/;
+    const SERVER_KEY = "farkle:server";
+
+    const cleanServer = (value) => String(value || "").trim().replace(/\/+$/, "");
+
+    // The game servers (scripts/config.js). The website has none listed and uses the server
+    // that sent the page, written "". The apps list every server they may use, in order of
+    // preference. Each game lives on the server that created it.
+    const SERVERS = (function () {
+        const listed = [].concat(window.FARKLE_SERVERS || window.FARKLE_SERVER || []).map(cleanServer).filter(Boolean);
+        return listed.length ? [...new Set(listed)] : [""];
+    })();
+
+    // The server this page talks to: the one named in the address (game pages), else the
+    // last one that worked, else the first on the list. Only listed servers are used.
+    function startingServer() {
+        const named = cleanServer(new URLSearchParams(window.location.search).get("server"));
+        if (named && SERVERS.includes(named)) return named;
+        try {
+            const last = cleanServer(window.localStorage.getItem(SERVER_KEY));
+            if (last && SERVERS.includes(last)) return last;
+        } catch (err) {
+            // Storage can be blocked, the first server will do
+        }
+        return SERVERS[0];
+    }
 
     const App = {
-        // The game server's address (scripts/config.js). Empty on the website, where the server
-        // is the one that sent the page.
-        server: String(window.FARKLE_SERVER || "").replace(/\/+$/, ""),
+        servers: SERVERS,
+
+        // The game server's address. Empty on the website, where the server is the one that
+        // sent the page.
+        server: startingServer(),
+
+        // Switches to a server that answered and remembers it for next time
+        useServer(server) {
+            server = cleanServer(server);
+            if (!SERVERS.includes(server)) return;
+            App.server = server;
+            try {
+                if (server) window.localStorage.setItem(SERVER_KEY, server);
+            } catch (err) {
+                // Not remembered, the next visit checks the servers again anyway
+            }
+        },
+
+        // The listed server an address such as an invite link points at, or null
+        serverOf(url) {
+            try {
+                const origin = cleanServer(new URL(url).origin);
+                return SERVERS.includes(origin) ? origin : null;
+            } catch (err) {
+                return null;
+            }
+        },
+
+        // fetch() for JSON that gives up after timeoutMs, so one slow server cannot hold up the rest
+        async getJSON(url, timeoutMs = 10000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const resp = await fetch(url, { signal: controller.signal, cache: "no-store" });
+                if (!resp.ok) throw new Error(`${url} answered ${resp.status}`);
+                return await resp.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        },
 
         // Running inside the Android or iOS app (Capacitor), not a browser
         isNative() {
@@ -19,19 +81,22 @@
         },
 
         // A server address for fetch(), for example App.api("/api/newgame")
-        api(path) {
-            return App.server + path;
+        api(path, server = App.server) {
+            return server + path;
         },
 
-        // A link to share with people outside the app: always the website's address
-        publicUrl(path) {
-            return (App.server || window.location.origin) + path;
+        // A link to share with people outside the app: the website of the server running the game
+        publicUrl(path, server = App.server) {
+            return (server || window.location.origin) + path;
         },
 
-        // Where a game's page is. The website has /abcde, the apps carry game.html and pass the code.
-        roomUrl(code) {
-            const room = String(code || "").toLowerCase();
-            return App.isNative() ? "/game.html?room=" + encodeURIComponent(room) : "/" + encodeURIComponent(room);
+        // Where a game's page is. The website has /abcde, the apps carry game.html and pass the
+        // code, plus the server running the game when there is more than one to choose from.
+        roomUrl(code, server = App.server) {
+            const room = encodeURIComponent(String(code || "").toLowerCase());
+            if (!App.isNative()) return "/" + room;
+            const on = SERVERS.length > 1 && server ? "&server=" + encodeURIComponent(server) : "";
+            return "/game.html?room=" + room + on;
         },
 
         // The game code of the page we are on, from /abcde or game.html?room=abcde

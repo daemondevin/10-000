@@ -172,7 +172,32 @@
     // Connection
 
     socket.on("connect", () => {
+        lostSince = 0;
         socket.emit("watch", { room, token: App.storage.session.get(TOKEN_KEY) });
+    });
+
+    // A game lives on the server that made it and goes when that server stops. When the apps
+    // have other servers to use and this one stays out of reach while the device is online,
+    // the player is sent back to the lobby, which starts new games on a server that works.
+    const SERVER_GONE_MS = 45000;
+    let lostSince = 0;
+    let goneShown = false;
+    socket.on("connect_error", async () => {
+        if (App.servers.length < 2 || goneShown) return;
+        if (!App.online()) {
+            lostSince = 0;
+            return;
+        }
+        if (!lostSince) lostSince = Date.now();
+        if (Date.now() - lostSince < SERVER_GONE_MS) return;
+        goneShown = true;
+        if (loader) loader.hide();
+        await themestrap.PluginDialog.alert({
+            title: "The game server isn't answering",
+            message: "This game was running on a server that has stopped answering, and the game can't move to another server. Back in the lobby you can start a new game, and it will use a server that works.",
+            confirmLabel: "Back to the lobby"
+        });
+        window.location.href = "/";
     });
 
     socket.on("disconnect", () => {
